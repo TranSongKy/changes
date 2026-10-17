@@ -17,7 +17,8 @@
 
   // ---------- trạng thái ----------
   function blank() {
-    return { settings: { ...P.defaults, viewDate: "" }, done30: {}, daily: {}, logs: [], mocks: [], hskWords: [], exDone: {}, matDone: {}, quizDone: {}, srs: {}, handRuns: [] };
+    return { settings: { ...P.defaults, viewDate: "" }, done30: {}, daily: {}, logs: [], mocks: [], hskWords: [], exDone: {}, matDone: {}, quizDone: {}, srs: {}, handRuns: [],
+      ieltsSec: [], ieltsDraft: {}, wDraft: { task: 2, prompt: "", text: "", elapsed: 0 }, essays: [], speakLog: [], cards: {}, myWords: [] };
   }
 
   function load() {
@@ -167,6 +168,17 @@
     }
     return "";
   }
+  // Nút mở đúng phần luyện tập cho từng buổi IELTS
+  function ieltsPractice(skill, text, d) {
+    if (skill === "Writing") return `<button type="button" class="doclink" data-practice="writing">Viết bài</button>`;
+    if (skill === "Speaking") return `<button type="button" class="doclink" data-practice="speaking">Luyện nói</button>`;
+    if (skill === "Mock") {
+      const t = camTests().find((x) => x.date === d);
+      return t ? `<button type="button" class="doclink" data-practice="test:${t.id}">Vào phòng thi</button>` : "";
+    }
+    if ((skill === "Listening" || skill === "Reading") && /đề|passage/i.test(text)) return `<button type="button" class="doclink" data-practice="test">Phòng thi</button>`;
+    return "";
+  }
   function hskMats(phase) {
     const m = phase.materials || {};
     return [m.course && matByKey(`hsk-course-${m.course}`), ...(m.vocab || []).map((v) => matByKey(`hsk-vocab-${v}`))].filter(Boolean);
@@ -265,13 +277,14 @@
       const before = d < P.ieltsPhases[0].from;
       plan = `<div class="grid">
         <div class="card"><h3>IELTS · giai đoạn ${ph}${before ? " (chưa bắt đầu)" : ""}</h3>
-          ${ielts.length ? `<ul class="checks">${ielts.map((it, i) => dailyItem(d, `i${i}`, "ielts", it[1], `<span class="pill good">${it[0]}</span> ${esc(it[2])} ${docLink(ieltsTopic(it[0], it[2]))}${ieltsMat(it[0], it[2], d)}`)).join("")}</ul>` : `<p class="muted">Hôm nay nghỉ IELTS.</p>`}
+          ${ielts.length ? `<ul class="checks">${ielts.map((it, i) => dailyItem(d, `i${i}`, "ielts", it[1], `<span class="pill good">${it[0]}</span> ${esc(it[2])} ${docLink(ieltsTopic(it[0], it[2]))}${ieltsMat(it[0], it[2], d)}${ieltsPractice(it[0], it[2], d)}`)).join("")}</ul>` : `<p class="muted">Hôm nay nghỉ IELTS.</p>`}
           ${focusHint()}
         </div>
         <div class="card"><h3>HSK · ${esc(hp.name)}</h3><ul class="checks">
           ${P.hskSession.map((s, i) => dailyItem(d, `h${i}`, "hsk", Math.round(s[0] * scale), esc(s[1]))).join("")}
         </ul><p class="small muted">${esc(hp.focus)}</p>
-          <p class="small">${docLink(hskTopic(hp.id), "Tài liệu giai đoạn này")} ${docLink(topicById("h-pinyin"), "Pinyin")} ${docLink(topicById("h-hanzi"), "Chữ Hán")}${hskMats(hp).map((x) => matLink(x)).join("")}</p></div></div>`;
+          <p class="small">${docLink(hskTopic(hp.id), "Tài liệu giai đoạn này")} ${docLink(topicById("h-pinyin"), "Pinyin")} ${docLink(topicById("h-hanzi"), "Chữ Hán")}${hskMats(hp).map((x) => matLink(x)).join("")}</p>
+          <p class="small"><button type="button" class="doclink" data-practice="cards">Thẻ từ hôm nay: ${cardQueue().due.length + cardQueue().fresh.length} thẻ</button><button type="button" class="doclink" data-practice="tones">Luyện thanh điệu</button></p></div></div>`;
     }
 
     el.innerHTML = `
@@ -507,7 +520,7 @@
         <form class="row" id="mockForm">
           <label>Ngày<input type="date" name="date" value="${d}" required></label>
           ${camTests().length ? `<label>Đề<select name="test"><option value="">Đề khác</option>${camTests().map((t) => `<option value="${t.id}" ${pendingTest === t.id ? "selected" : ""}>${camLabel(t.id)}${camMock(t.id) ? " (đã làm)" : ""}</option>`).join("")}</select></label>` : ""}
-          ${L.SKILLS.map((k) => `<label>${k}<input type="number" name="${k}" min="0" max="9" step="0.5" required></label>`).join("")}
+          ${L.SKILLS.map((k) => { const sec = pendingTest && [...state.ieltsSec].reverse().find((x) => x.test === pendingTest && x.skill === k); return `<label>${k}<input type="number" name="${k}" min="0" max="9" step="0.5" required ${sec ? `value="${sec.band}"` : ""}></label>`; }).join("")}
           <button class="btn">Lưu</button>
         </form>
         <table style="margin-top:12px"><tr><th>Ngày</th><th>Đề</th>${L.SKILLS.map((k) => `<th>${k[0]}</th>`).join("")}<th>Overall</th><th></th></tr>
@@ -808,9 +821,16 @@
   const GA = window.GraphAlgo;
   const PR = window.Practice;
   const QZ = window.QUIZ || [];
-  const PVIEWS = [["sim", "Mô phỏng thuật toán"], ["hand", "Luyện chạy tay"], ["quiz", "Câu hỏi"], ["review", "Ôn lại"]];
-  const pr = { view: "sim", algo: "bfs", graph: null, src: 1, step: 0, timer: null,
-    hAlgo: "dijkstra", hGraph: null, hSeed: 0, hResult: null, qSubject: "graph", qTopic: "", qOpen: {} };
+  const PSUBJ = [["cs", "Đồ thị + OOP"], ["ielts", "IELTS"], ["hsk", "HSK"]];
+  const PVIEWS = {
+    cs: [["sim", "Mô phỏng thuật toán"], ["hand", "Luyện chạy tay"], ["quiz", "Câu hỏi"], ["review", "Ôn lại"]],
+    ielts: [["test", "Phòng thi Listening/Reading"], ["writing", "Writing"], ["speaking", "Speaking"]],
+    hsk: [["cards", "Thẻ từ"], ["tones", "Luyện thanh điệu"], ["words", "Bộ từ của bạn"]],
+  };
+  const subjectOfView = (v) => Object.keys(PVIEWS).find((k) => PVIEWS[k].some(([x]) => x === v));
+  const pr = { view: "", algo: "bfs", graph: null, src: 1, step: 0, timer: null,
+    hAlgo: "dijkstra", hGraph: null, hSeed: 0, hResult: null, qSubject: "graph", qTopic: "", qOpen: {},
+    tTest: "", tSkill: "Listening", tPdf: true, tRun: 0, wRun: 0, sCard: 0, sPhase: "", cCur: "", cFlip: false, toneQ: null, toneStreak: 0 };
 
   const dueList = () => PR.due(state.srs, realToday());
   const quizTopics = (subject) => LIB.topics.filter((t) => t.subject === subject && QZ.some((q) => q.topic === t.id));
@@ -1224,31 +1244,556 @@
     save();
   }
 
+  // ---------- Luyện IELTS ----------
+  const IT = window.IeltsTools;
+  const TEST_MIN = { Listening: 40, Reading: 60 };
+  const fmtClock = (sec) => {
+    const s = Math.abs(Math.round(sec));
+    return `${sec < 0 ? "+" : ""}${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  };
+  const tKey = () => `${pr.tTest}|${pr.tSkill}`;
+  function tDraft() {
+    const k = tKey();
+    if (!state.ieltsDraft[k]) state.ieltsDraft[k] = { answers: Array(40).fill(""), marks: Array(40).fill(false), elapsed: 0, marking: false };
+    return state.ieltsDraft[k];
+  }
+  const tElapsed = (dr) => dr.elapsed + (pr.tRun ? (Date.now() - pr.tRun) / 1000 : 0);
+  function tStop() {
+    if (pr.tRun) {
+      const dr = state.ieltsDraft[pr.tRunKey];
+      if (dr) dr.elapsed += (Date.now() - pr.tRun) / 1000;
+      save();
+    }
+    pr.tRun = 0;
+    clearInterval(pr.tTick);
+  }
+  const sections = (skill) => (skill === "Listening" ? [["Part 1", 1, 10], ["Part 2", 11, 20], ["Part 3", 21, 30], ["Part 4", 31, 40]] : [["Passage 1", 1, 13], ["Passage 2", 14, 26], ["Passage 3", 27, 40]]);
+
+  function scoreHtml(raw) {
+    const need = IT.rawForBand(pr.tSkill, S().ieltsTargetBand);
+    return `<div class="alert ${raw >= need ? "good" : "warn"}">Đúng <b>${raw}/40</b> → band ước tính <b>${band(IT.bandFromRaw(pr.tSkill, raw))}</b>. Cần ${need}/40 cho band ${band(S().ieltsTargetBand)}.</div>`;
+  }
+
+  // Các nút bấm giờ và chấm từng câu chỉ sửa đúng chỗ, không vẽ lại cả trang, để sách PDF bên cạnh không bị tải lại về trang đầu.
+  function renderTest(el) {
+    const tests = camTests();
+    if (!pr.tTest) {
+      const next = tests.find((t) => !state.ieltsSec.some((x) => x.test === t.id)) || tests[0];
+      pr.tTest = next ? next.id : "other";
+    }
+    const dr = tDraft();
+    const book = pr.tTest !== "other" ? matByKey(`cambridge-${pr.tTest.replace(/^c(\d+)t\d$/, "$1")}`) : null;
+    const limit = TEST_MIN[pr.tSkill] * 60;
+    const raw = dr.marks.filter(Boolean).length;
+    const hist = [...state.ieltsSec].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 12);
+    const row = (i) => `<div class="arow"><span class="qn">${i + 1}</span>
+      <input data-ans="${i}" value="${esc(dr.answers[i])}" autocomplete="off" ${dr.marking ? "readonly" : ""}>
+      ${dr.marking ? `<button type="button" class="mk ${dr.marks[i] ? "on" : ""}" data-mark="${i}" title="Bấm nếu câu này đúng theo đáp án">${dr.marks[i] ? "✓" : "✗"}</button>` : ""}</div>`;
+    el.innerHTML = `
+      <div class="card"><div class="row" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+        <label class="field">Đề<select id="tTest">${tests.map((t) => `<option value="${t.id}" ${pr.tTest === t.id ? "selected" : ""}>${camLabel(t.id)}${state.ieltsSec.some((x) => x.test === t.id) ? " ✓" : ""}</option>`).join("")}<option value="other" ${pr.tTest === "other" ? "selected" : ""}>Đề khác</option></select></label>
+        <label class="field">Kỹ năng<select id="tSkill">${["Listening", "Reading"].map((k) => `<option ${pr.tSkill === k ? "selected" : ""}>${k}</option>`).join("")}</select></label>
+        <div class="timer"><div class="clock ${tElapsed(dr) > limit ? "over" : ""}" id="tClock">${fmtClock(limit - tElapsed(dr))}</div>
+          <button type="button" class="btn" id="tGo">${pr.tRun ? "Tạm dừng" : dr.elapsed ? "Làm tiếp" : "Bắt đầu"}</button>
+          <button type="button" class="btn ghost" id="tReset">Làm lại từ đầu</button></div>
+        ${book ? `<label class="small"><input type="checkbox" id="tPdf" ${pr.tPdf ? "checked" : ""}> Mở sách bên cạnh</label>` : ""}
+      </div>
+      <p class="small muted" style="margin:8px 0 0">${pr.tSkill === "Listening" ? "40 phút: 30 phút nghe và 10 phút chép đáp án như thi trên giấy. Sách PDF không có audio, bạn mở audio của đúng cuốn và đề này ở ứng dụng khác." : "60 phút cho 3 passage, không có thêm thời gian chép đáp án."}
+        ${book && !book.file ? " Sách này chỉ có trên Drive nên không mở bên cạnh được." : ""}</p></div>
+      <div class="${book && book.file && pr.tPdf ? "sim" : ""}">
+        ${book && book.file && pr.tPdf ? `<div class="card pdfbox"><iframe class="pdf" src="${esc(book.file)}" title="${esc(book.title)}"></iframe>
+          <p class="small muted">Tìm ${camLabel(pr.tTest).replace("Cambridge ", "Test ").replace(/^Test \d+ /, "")} trong mục lục. ${matOpen(book)}</p></div>` : ""}
+        <div class="card"><h3>Phiếu trả lời ${pr.tSkill}</h3>
+          ${dr.marking ? `<div id="tScore">${scoreHtml(raw)}</div>
+            <p class="small muted">Mở phần Answer key cuối sách, bấm vào ô ✗ của mỗi câu đúng để đổi thành ✓.</p>` : ""}
+          <div class="asheet">${sections(pr.tSkill).map(([name, a, b]) => `<div><h4>${name}</h4>${Array.from({ length: b - a + 1 }, (_, k) => row(a - 1 + k)).join("")}</div>`).join("")}</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+            ${dr.marking ? `<button type="button" class="btn" id="tSave">Lưu kết quả</button><button type="button" class="btn ghost" id="tBack">Sửa đáp án</button>`
+              : `<button type="button" class="btn" id="tMark">Nộp bài và chấm</button>`}
+          </div></div>
+      </div>
+      <div class="card"><h3>Kết quả đã lưu</h3>
+        <table><tr><th>Ngày</th><th>Đề</th><th>Kỹ năng</th><th>Đúng</th><th>Band</th><th>Thời gian</th></tr>
+        ${hist.map((x) => `<tr><td>${fmtShort(x.date)}/${x.date.slice(2, 4)}</td><td>${x.test === "other" ? "Đề khác" : camLabel(x.test)}</td><td>${x.skill}</td><td>${x.raw}/40</td><td><b>${band(x.band)}</b></td><td>${Math.round(x.minutes)}'</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Chưa có kết quả nào.</td></tr>`}</table>
+        <p class="small muted">Điểm Listening và Reading của cùng một đề sẽ được điền sẵn khi bạn nhập đề thử ở tab IELTS.</p></div>`;
+
+    const rer = () => renderPracticeBody();
+    el.querySelector("#tTest").onchange = (e) => { tStop(); pr.tTest = e.target.value; rer(); };
+    el.querySelector("#tSkill").onchange = (e) => { tStop(); pr.tSkill = e.target.value; rer(); };
+    const pdf = el.querySelector("#tPdf");
+    if (pdf) pdf.onchange = (e) => { pr.tPdf = e.target.checked; rer(); };
+    el.querySelector("#tGo").onclick = (ev) => {
+      if (pr.tRun) tStop();
+      else {
+        pr.tRun = Date.now();
+        pr.tRunKey = tKey();
+        pr.tTick = setInterval(() => {
+          const c = document.getElementById("tClock");
+          if (!c || pr.view !== "test") return;
+          const left = limit - tElapsed(state.ieltsDraft[pr.tRunKey]);
+          c.textContent = fmtClock(left);
+          c.classList.toggle("over", left < 0);
+          if (left <= 0 && left > -1.2) toast("Hết giờ. Bạn có thể làm tiếp, đồng hồ sẽ tính phần quá giờ.");
+        }, 1000);
+      }
+      ev.target.textContent = pr.tRun ? "Tạm dừng" : "Làm tiếp";
+    };
+    el.querySelector("#tReset").onclick = () => {
+      tStop();
+      delete state.ieltsDraft[tKey()];
+      save();
+      rer();
+    };
+    el.querySelectorAll("[data-ans]").forEach((x) => (x.oninput = () => {
+      dr.answers[Number(x.dataset.ans)] = x.value;
+      save();
+    }));
+    el.querySelectorAll("[data-mark]").forEach((b) => (b.onclick = () => {
+      const i = Number(b.dataset.mark);
+      dr.marks[i] = !dr.marks[i];
+      save();
+      b.classList.toggle("on", dr.marks[i]);
+      b.textContent = dr.marks[i] ? "✓" : "✗";
+      el.querySelector("#tScore").innerHTML = scoreHtml(dr.marks.filter(Boolean).length);
+    }));
+    const mk = el.querySelector("#tMark");
+    if (mk) mk.onclick = () => { tStop(); dr.marking = true; save(); rer(); };
+    const back = el.querySelector("#tBack");
+    if (back) back.onclick = () => { dr.marking = false; save(); rer(); };
+    const sv = el.querySelector("#tSave");
+    if (sv) sv.onclick = () => {
+      const raw = dr.marks.filter(Boolean).length;
+      state.ieltsSec.push({ id: Date.now(), date: realToday(), test: pr.tTest, skill: pr.tSkill, raw, band: IT.bandFromRaw(pr.tSkill, raw), minutes: tElapsed(dr) / 60 });
+      if (tElapsed(dr) > 60) addLog({ date: realToday(), subject: "ielts", minutes: Math.round(tElapsed(dr) / 60), note: `${pr.tTest === "other" ? "Đề khác" : camLabel(pr.tTest)} ${pr.tSkill}` });
+      delete state.ieltsDraft[tKey()];
+      save();
+      renderAll();
+      toast(`Đã lưu: ${pr.tSkill} band ${band(IT.bandFromRaw(pr.tSkill, raw))}`);
+    };
+  }
+
+  // ---------- Writing ----------
+  function renderWriting(el) {
+    const w = state.wDraft;
+    const min = w.task === 1 ? 150 : 250, limit = (w.task === 1 ? 20 : 40) * 60;
+    const words = IT.wordCount(w.text);
+    const docs = mats((x) => x.cat === "writing" && (x.task === w.task || x.task === 0));
+    const el2 = (w.elapsed || 0) + (pr.wRun ? (Date.now() - pr.wRun) / 1000 : 0);
+    const scored = w.scoring;
+    const crit = IT.CRITERIA.map((c) => {
+      const ticked = (w.ticks && w.ticks[c.key]) || [];
+      const auto = IT.criterionBand(c.checks, ticked);
+      const val = w.scores && w.scores[c.key] !== undefined ? w.scores[c.key] : auto;
+      return { c, ticked, auto, val };
+    });
+    const est = IT.writingBand(Object.fromEntries(crit.map((x) => [x.c.key, x.val])));
+    el.innerHTML = `
+      <div class="card"><div class="row" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+        <label class="field">Bài<select id="wTask"><option value="1" ${w.task === 1 ? "selected" : ""}>Task 1 (20 phút, ≥150 từ)</option><option value="2" ${w.task === 2 ? "selected" : ""}>Task 2 (40 phút, ≥250 từ)</option></select></label>
+        <div class="timer"><div class="clock ${el2 > limit ? "over" : ""}" id="wClock">${fmtClock(limit - el2)}</div>
+          <button type="button" class="btn" id="wGo">${pr.wRun ? "Tạm dừng" : el2 ? "Viết tiếp" : "Bắt đầu"}</button>
+          <button type="button" class="btn ghost" id="wNew">Bài mới</button></div>
+      </div>
+      ${docs.length ? `<p class="small" style="margin:8px 0 0">Đề và bài mẫu trong Thư viện: ${docs.map((x) => matLink(x)).join("")}</p>` : ""}</div>
+      <div class="card">
+        <label class="field">Đề bài (gõ hoặc dán đề vào đây)<textarea id="wPrompt" rows="3">${esc(w.prompt)}</textarea></label>
+        <label class="field" style="margin-top:10px">Bài viết<textarea id="wText" rows="16" class="essay" ${scored ? "readonly" : ""}>${esc(w.text)}</textarea></label>
+        <p class="small"><b id="wCount" class="${words < min ? "bad-t" : "ok"}">${words} từ</b> <span class="muted">/ tối thiểu ${min}</span></p>
+        ${scored ? "" : `<button type="button" class="btn" id="wScore">Nộp và tự chấm</button>`}
+      </div>
+      ${scored ? `<div class="card"><h3>Tự chấm theo 4 tiêu chí</h3>
+        <p class="small muted">Tích những câu đúng với bài của bạn. Web gợi ý band từng tiêu chí, bạn chỉnh lại được. Đây chỉ là tự đánh giá: nhờ giáo viên hoặc người chấm sửa bài vẫn là cách lên band nhanh nhất.</p>
+        <div class="grid">${crit.map(({ c, ticked, val }) => `<div><h4>${c.name}</h4><ul class="checks">${c.checks.map(([lv, txt], i) => `<li><input type="checkbox" data-tick="${c.key}|${i}" ${ticked.includes(i) ? "checked" : ""}><span>${esc(txt)} <span class="pill">${lv}</span></span></li>`).join("")}</ul>
+          <label class="field">Band<select data-score="${c.key}">${[4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9].map((b) => `<option ${Number(val) === b ? "selected" : ""}>${b}</option>`).join("")}</select></label></div>`).join("")}</div>
+        <div class="alert good" style="margin-top:12px">Band ước tính cho bài này: <b>${est === null ? "—" : band(est)}</b> (${words} từ${words < min ? `, thiếu ${min - words} từ nên Task Achievement sẽ bị trừ` : ""}).</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn" id="wSave">Lưu bài</button><button type="button" class="btn ghost" id="wEdit">Sửa tiếp bài viết</button></div></div>` : ""}
+      <div class="card"><h3>Bài đã viết</h3>
+        ${state.essays.length ? `<table><tr><th>Ngày</th><th>Bài</th><th>Số từ</th><th>Band</th><th></th></tr>
+          ${[...state.essays].reverse().map((x) => `<tr><td>${fmtShort(x.date)}/${x.date.slice(2, 4)}</td><td>Task ${x.task}: <span class="small muted">${esc(x.prompt.slice(0, 60))}${x.prompt.length > 60 ? "…" : ""}</span></td><td>${x.words}</td><td><b>${band(x.band)}</b></td>
+            <td><button type="button" class="doclink" data-copy="${x.id}">Chép bài</button></td></tr>`).join("")}</table>
+          <p class="small muted">"Chép bài" chép cả đề và bài viết để dán gửi người sửa.</p>` : `<p class="muted">Chưa có bài nào.</p>`}</div>`;
+
+    const rer = () => renderPracticeBody();
+    const tick = () => {
+      const c = document.getElementById("wClock");
+      if (!c || pr.view !== "writing") return;
+      const left = limit - ((state.wDraft.elapsed || 0) + (pr.wRun ? (Date.now() - pr.wRun) / 1000 : 0));
+      c.textContent = fmtClock(left);
+      c.classList.toggle("over", left < 0);
+    };
+    const stopW = () => {
+      if (pr.wRun) state.wDraft.elapsed = (state.wDraft.elapsed || 0) + (Date.now() - pr.wRun) / 1000;
+      pr.wRun = 0;
+      clearInterval(pr.wTick);
+      save();
+    };
+    pr.stopWriting = stopW;
+    el.querySelector("#wTask").onchange = (e) => { w.task = Number(e.target.value); save(); rer(); };
+    el.querySelector("#wGo").onclick = () => {
+      if (pr.wRun) stopW();
+      else { pr.wRun = Date.now(); pr.wTick = setInterval(tick, 1000); }
+      rer();
+    };
+    el.querySelector("#wNew").onclick = () => {
+      if (w.text.trim() && !pr.wArm) {
+        pr.wArm = true;
+        toast("Bài đang viết chưa lưu. Bấm Bài mới lần nữa để bỏ.");
+        setTimeout(() => (pr.wArm = false), 3000);
+        return;
+      }
+      stopW();
+      state.wDraft = { task: w.task, prompt: "", text: "", elapsed: 0 };
+      save();
+      rer();
+    };
+    el.querySelector("#wPrompt").oninput = (e) => { w.prompt = e.target.value; save(); };
+    el.querySelector("#wText").oninput = (e) => {
+      w.text = e.target.value;
+      save();
+      const n = IT.wordCount(w.text), c = el.querySelector("#wCount");
+      c.textContent = `${n} từ`;
+      c.className = n < min ? "bad-t" : "ok";
+    };
+    const sc = el.querySelector("#wScore");
+    if (sc) sc.onclick = () => {
+      if (!w.text.trim()) { toast("Bạn chưa viết gì."); return; }
+      stopW();
+      w.scoring = true;
+      w.ticks = w.ticks || {};
+      w.scores = {};
+      save();
+      rer();
+    };
+    el.querySelectorAll("[data-tick]").forEach((cb) => (cb.onchange = () => {
+      const [k, i] = cb.dataset.tick.split("|");
+      const t = new Set(w.ticks[k] || []);
+      if (cb.checked) t.add(Number(i)); else t.delete(Number(i));
+      w.ticks[k] = [...t];
+      delete w.scores[k];
+      save();
+      rer();
+    }));
+    el.querySelectorAll("[data-score]").forEach((s2) => (s2.onchange = () => { w.scores[s2.dataset.score] = Number(s2.value); save(); rer(); }));
+    const ed = el.querySelector("#wEdit");
+    if (ed) ed.onclick = () => { w.scoring = false; save(); rer(); };
+    const sv = el.querySelector("#wSave");
+    if (sv) sv.onclick = () => {
+      const scores = Object.fromEntries(crit.map((x) => [x.c.key, x.val]));
+      state.essays.push({ id: Date.now(), date: realToday(), task: w.task, prompt: w.prompt, text: w.text, words, scores, band: est, minutes: Math.round((w.elapsed || 0) / 60) });
+      if (w.elapsed > 60) addLog({ date: realToday(), subject: "ielts", minutes: Math.round(w.elapsed / 60), note: `Writing Task ${w.task}` });
+      state.wDraft = { task: w.task, prompt: "", text: "", elapsed: 0 };
+      save();
+      renderAll();
+      toast(`Đã lưu bài, band ước tính ${band(est)}`);
+    };
+    el.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = async () => {
+      const x = state.essays.find((e) => String(e.id) === b.dataset.copy);
+      try {
+        await navigator.clipboard.writeText(`IELTS Writing Task ${x.task}\n\n${x.prompt}\n\n${x.text}\n\n(${x.words} từ)`);
+        toast("Đã chép vào bộ nhớ tạm");
+      } catch (e) {
+        toast("Trình duyệt không cho chép, hãy bôi đen và chép tay.");
+      }
+    }));
+    if (pr.wRun) { clearInterval(pr.wTick); pr.wTick = setInterval(tick, 1000); }
+  }
+
+  // ---------- Speaking Part 2 ----------
+  function renderSpeaking(el) {
+    const [title, bullets] = IT.CUE_CARDS[pr.sCard % IT.CUE_CARDS.length];
+    const canRec = !!(navigator.mediaDevices && window.MediaRecorder);
+    el.innerHTML = `
+      <div class="sim">
+        <div class="card"><h3>Speaking Part 2</h3>
+          <div class="cue"><b>${esc(title)}</b><p class="small">You should say:</p><ul>${bullets.map((b) => `<li>${esc(b)}</li>`).join("")}</ul></div>
+          <div class="sim-ctrl" style="margin-top:12px">
+            <button type="button" class="btn" id="sGo">${pr.sPhase ? "Dừng" : "Bắt đầu (1 phút chuẩn bị)"}</button>
+            <button type="button" class="btn ghost" id="sNext">Đề khác</button>
+            <span class="clock" id="sClock" style="font-size:22px">${pr.sPhase === "prep" ? "Chuẩn bị" : pr.sPhase === "talk" ? "Đang nói" : ""}</span>
+          </div>
+          <label class="field">Ghi chú khi chuẩn bị (từ khóa, không viết cả câu)<textarea id="sNotes" rows="4"></textarea></label>
+        </div>
+        <div class="card"><h3>Ghi âm và tự nghe lại</h3>
+          ${canRec ? `<p class="small muted">Khi hết phút chuẩn bị, web tự ghi âm 2 phút. File ghi âm chỉ nằm trong trình duyệt, không gửi đi đâu.</p>` : `<p class="small muted">Trình duyệt này không ghi âm được. Hãy dùng ứng dụng ghi âm của điện thoại.</p>`}
+          <div id="sAudio">${pr.sUrl ? `<audio controls src="${pr.sUrl}"></audio><p><a href="${pr.sUrl}" download="speaking-part2.webm">Tải file ghi âm</a></p>` : ""}</div>
+          <h4>Nghe lại và tự kiểm</h4>
+          <ul class="checks small">${["Nói đủ 4 ý trên thẻ", "Nói liên tục gần đủ 2 phút, không dừng lâu", "Ít \"ờ, à\" và không lặp lại một từ nối mãi", "Chia thì đúng (kể chuyện quá khứ dùng quá khứ)", "Có ít nhất 2 từ hoặc cụm từ hay, đúng ngữ cảnh"].map((t) => `<li><input type="checkbox"><span>${t}</span></li>`).join("")}</ul>
+        </div>
+      </div>`;
+    el.querySelector("#sNext").onclick = () => { stopSpeak(); pr.sCard = (pr.sCard + 1 + Math.floor(Math.random() * (IT.CUE_CARDS.length - 1))) % IT.CUE_CARDS.length; renderPracticeBody(); };
+    el.querySelector("#sGo").onclick = () => {
+      if (pr.sPhase) { stopSpeak(); renderPracticeBody(); return; }
+      pr.sPhase = "prep";
+      let left = 60;
+      const c = () => document.getElementById("sClock");
+      const show = (txt) => { if (c()) c().textContent = txt; };
+      show(`Chuẩn bị ${fmtClock(left)}`);
+      const b = el.querySelector("#sGo");
+      b.textContent = "Dừng";
+      pr.sTick = setInterval(async () => {
+        left--;
+        if (pr.sPhase === "prep") {
+          show(`Chuẩn bị ${fmtClock(left)}`);
+          if (left <= 0) {
+            pr.sPhase = "talk";
+            left = 120;
+            await startRec();
+            show(`Đang nói ${fmtClock(left)}`);
+          }
+        } else if (pr.sPhase === "talk") {
+          show(`Đang nói ${fmtClock(left)}`);
+          if (left <= 0) {
+            stopSpeak();
+            state.speakLog.push({ date: realToday(), card: title });
+            addLog({ date: realToday(), subject: "ielts", minutes: 3, note: "Speaking Part 2" });
+            save();
+            toast("Hết 2 phút. Nghe lại bản ghi âm và tự kiểm bên phải.");
+            renderPracticeBody();
+          }
+        }
+      }, 1000);
+    };
+  }
+  async function startRec() {
+    if (!(navigator.mediaDevices && window.MediaRecorder)) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chunks = [];
+      const rec = new MediaRecorder(stream);
+      rec.ondataavailable = (e) => chunks.push(e.data);
+      rec.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        if (pr.sUrl) URL.revokeObjectURL(pr.sUrl);
+        pr.sUrl = URL.createObjectURL(new Blob(chunks, { type: rec.mimeType || "audio/webm" }));
+        if (pr.view === "speaking") renderPracticeBody();
+      };
+      rec.start();
+      pr.sRec = rec;
+    } catch (e) {
+      toast("Không mở được micro. Kiểm tra quyền micro của trình duyệt.");
+    }
+  }
+  function stopSpeak() {
+    clearInterval(pr.sTick);
+    pr.sPhase = "";
+    if (pr.sRec && pr.sRec.state !== "inactive") pr.sRec.stop();
+    pr.sRec = null;
+  }
+
+  // ---------- Thẻ từ HSK ----------
+  const deck = () => [...(window.HSK_DECK || []), ...state.myWords];
+  function speakZh(text) {
+    if (!window.speechSynthesis) { toast("Trình duyệt không hỗ trợ đọc thành tiếng."); return; }
+    const voices = speechSynthesis.getVoices();
+    const v = voices.find((x) => /^zh(-|_)?(CN|Hans)?/i.test(x.lang)) || voices.find((x) => /^zh/i.test(x.lang));
+    if (!v && voices.length) toast("Máy chưa có giọng đọc tiếng Trung. Trên Windows: Cài đặt > Thời gian và ngôn ngữ > Giọng nói, thêm tiếng Trung.");
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "zh-CN";
+    if (v) u.voice = v;
+    u.rate = 0.85;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  }
+  function newPerDay() {
+    if (S().hskNewPerDay > 0) return S().hskNewPerDay;
+    const p = L.hskProjection({ knownWords: knownWords(), targetLevel: Number(S().hskTargetLevel), levels: hskStd().levels, today: realToday(), exam: S().hskExam });
+    return Math.min(Math.max(Math.ceil(p.perDay), 3), 20);
+  }
+  function cardQueue() {
+    const d = realToday();
+    const due = deck().filter((w) => state.cards[w.h] && state.cards[w.h].due <= d).sort((a, b) => (state.cards[a.h].due < state.cards[b.h].due ? -1 : 1));
+    const learnedToday = Object.values(state.cards).filter((c) => c.first === d).length;
+    const fresh = deck().filter((w) => !state.cards[w.h]).slice(0, Math.max(newPerDay() - learnedToday, 0));
+    return { due, fresh, learnedToday };
+  }
+  const cardsKnown = () => Object.values(state.cards).filter((c) => c.box >= 1).length;
+
+  function renderCards(el) {
+    const { due, fresh, learnedToday } = cardQueue();
+    const q = [...due, ...fresh];
+    if (!pr.cCur || !q.some((w) => w.h === pr.cCur)) { pr.cCur = q.length ? q[0].h : ""; pr.cFlip = false; }
+    const w = deck().find((x) => x.h === pr.cCur);
+    const isNew = w && !state.cards[w.h];
+    const total = deck().length;
+    el.innerHTML = `
+      <div class="grid">
+        <div class="card"><div class="muted small">Hôm nay</div><div class="stat">${q.length} <small>thẻ còn lại</small></div>
+          <div class="small muted">${due.length} thẻ ôn, ${fresh.length} từ mới (đã học ${learnedToday}/${newPerDay()} từ mới hôm nay)</div></div>
+        <div class="card"><div class="muted small">Đã thuộc trong bộ thẻ</div><div class="stat">${cardsKnown()} <small>/ ${total} từ</small></div>
+          <div class="bar"><span style="width:${pct(cardsKnown(), total)}%;background:var(--hsk)"></span></div>
+          ${cardsKnown() > knownWords() ? `<button type="button" class="doclink" id="cSync">Ghi ${cardsKnown()} vào số từ đã thuộc</button>` : ""}</div>
+        <div class="card"><label class="field">Từ mới mỗi ngày<input type="number" id="cPer" min="0" max="50" value="${S().hskNewPerDay || ""}" placeholder="Tự động: ${newPerDay()}"></label>
+          <p class="small muted">Để trống thì web lấy theo số từ cần học mỗi ngày ở tab HSK.</p></div>
+      </div>
+      ${w ? `<div class="card flash">
+        <div class="small muted">${isNew ? '<span class="pill hsk">Từ mới</span>' : '<span class="pill">Ôn lại</span>'} ${w.l ? `HSK ${w.l}` : "Từ của bạn"}</div>
+        <div class="hz" lang="zh-CN">${esc(w.h)}</div>
+        <button type="button" class="btn ghost" id="cSay">🔊 Nghe</button>
+        ${pr.cFlip ? `<div class="back"><div class="py">${esc(w.p)}</div><div class="mn">${esc(w.m)}</div>${w.ex ? `<div class="ex" lang="zh-CN">${esc(w.ex)}</div>` : ""}</div>
+          <div class="grade">${isNew ? `<button type="button" class="btn ghost" data-cg="0">Chưa nhớ</button><button type="button" class="btn" data-cg="2">Đã nhớ</button>`
+            : `<button type="button" class="btn ghost" data-cg="0">Quên <kbd>1</kbd></button><button type="button" class="btn ghost" data-cg="1">Khó <kbd>2</kbd></button><button type="button" class="btn" data-cg="2">Nhớ <kbd>3</kbd></button>`}</div>`
+          : `<div><button type="button" class="btn" id="cFlip">Lật thẻ <kbd>Space</kbd></button></div><p class="small muted">Nhìn chữ, đọc to pinyin và nhớ nghĩa trước khi lật.</p>`}
+      </div>` : `<div class="card"><p>Hết thẻ hôm nay. ${deck().every((x) => state.cards[x.h]) ? "Bạn đã học hết bộ thẻ, hãy thêm từ trong giáo trình ở mục Bộ từ của bạn." : "Mai quay lại để ôn những từ đến hạn."}</p></div>`}
+      <p class="small muted">Thẻ trả lời "Quên" quay lại ngày mai, "Nhớ" thì lần ôn sau giãn ra 2, 4, 7, 15, 30 ngày. Bộ thẻ gồm ${(window.HSK_DECK || []).length} từ cơ bản HSK 1–2 và ${state.myWords.length} từ bạn tự thêm.</p>`;
+    const per = el.querySelector("#cPer");
+    per.onchange = () => { state.settings.hskNewPerDay = Number(per.value) || 0; save(); renderPracticeBody(); };
+    const sync = el.querySelector("#cSync");
+    if (sync) sync.onclick = () => {
+      state.hskWords = state.hskWords.filter((x) => x.date !== realToday());
+      state.hskWords.push({ date: realToday(), words: cardsKnown() });
+      save();
+      renderAll();
+      toast("Đã cập nhật số từ đã thuộc");
+    };
+    if (!w) return;
+    el.querySelector("#cSay").onclick = () => speakZh(w.h);
+    const flip = el.querySelector("#cFlip");
+    if (flip) flip.onclick = () => { pr.cFlip = true; renderPracticeBody(); speakZh(w.h); };
+    el.querySelectorAll("[data-cg]").forEach((b) => (b.onclick = () => gradeCard(w, Number(b.dataset.cg))));
+  }
+  function gradeCard(w, g) {
+    const d = realToday();
+    const prev = state.cards[w.h];
+    state.cards[w.h] = { ...PR.reviewCard(prev, g, d), first: prev ? prev.first : d };
+    pr.cCur = "";
+    pr.cFlip = false;
+    save();
+    renderPracticeBody();
+    renderToday();
+  }
+  document.addEventListener("keydown", (e) => {
+    if (pr.view !== "cards" || !document.getElementById("tab-practice").classList.contains("active")) return;
+    if (/input|textarea|select/i.test(e.target.tagName)) return;
+    const w = deck().find((x) => x.h === pr.cCur);
+    if (!w) return;
+    if (e.code === "Space" && !pr.cFlip) { e.preventDefault(); pr.cFlip = true; renderPracticeBody(); speakZh(w.h); }
+    else if (pr.cFlip && ["1", "2", "3"].includes(e.key)) {
+      const isNew = !state.cards[w.h];
+      gradeCard(w, isNew ? (e.key === "1" ? 0 : 2) : Number(e.key) - 1);
+    }
+  });
+
+  // ---------- Luyện thanh điệu ----------
+  function renderTones(el) {
+    const pool = deck().filter((w) => /[āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ]/.test(w.p));
+    if (!pool.length) { el.innerHTML = `<div class="card"><p class="muted">Chưa có từ nào.</p></div>`; return; }
+    const learned = pool.filter((w) => state.cards[w.h]);
+    const src = learned.length >= 8 ? learned : pool;
+    if (!pr.toneQ || !pool.some((w) => w.h === pr.toneQ.h)) {
+      const w = src[Math.floor(Math.random() * src.length)];
+      pr.toneQ = { h: w.h, opts: PR.toneOptions(w.p, 4), pick: null };
+    }
+    const w = pool.find((x) => x.h === pr.toneQ.h);
+    const t = pr.toneQ;
+    el.innerHTML = `<div class="card flash">
+      <p class="small muted">Nghe và chọn pinyin có thanh điệu đúng. ${learned.length >= 8 ? "Từ được lấy trong những từ bạn đã học." : "Học thêm thẻ từ để bài luyện lấy đúng từ bạn đã học."}</p>
+      <div class="hz" lang="zh-CN">${esc(w.h)}</div>
+      <button type="button" class="btn ghost" id="tnSay">🔊 Nghe</button>
+      <div class="choices tones">${t.opts.map((o) => `<button type="button" class="choice ${t.pick !== null ? (o === w.p ? "ok" : o === t.pick ? "bad" : "") : ""}" data-tone="${esc(o)}">${esc(o)}</button>`).join("")}</div>
+      ${t.pick !== null ? `<p>${t.pick === w.p ? '<b class="ok">Đúng.</b>' : `<b class="bad-t">Chưa đúng.</b> Đáp án: <b>${esc(w.p)}</b>.`} Nghĩa: ${esc(w.m)}</p><button type="button" class="btn" id="tnNext">Từ tiếp theo</button>` : ""}
+      <p class="small muted">Chuỗi đúng liên tiếp: <b>${pr.toneStreak}</b></p></div>`;
+    el.querySelector("#tnSay").onclick = () => speakZh(w.h);
+    el.querySelectorAll("[data-tone]").forEach((b) => (b.onclick = () => {
+      if (t.pick !== null) return;
+      t.pick = b.dataset.tone;
+      pr.toneStreak = t.pick === w.p ? pr.toneStreak + 1 : 0;
+      renderPracticeBody();
+    }));
+    const nx = el.querySelector("#tnNext");
+    if (nx) nx.onclick = () => { pr.toneQ = null; renderPracticeBody(); const h = pr.toneQ && pr.toneQ.h; if (h) speakZh(h); };
+  }
+
+  // ---------- Bộ từ của bạn ----------
+  function parseWords(text) {
+    const out = [], bad = [];
+    for (const line of String(text).split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      const parts = line.split(/\t|\|/).map((x) => x.trim()).filter(Boolean);
+      if (parts.length >= 3 && /[㐀-鿿]/.test(parts[0])) out.push({ h: parts[0], p: parts[1], m: parts.slice(2).join(", ") });
+      else bad.push(line);
+    }
+    return { out, bad };
+  }
+  function renderWords(el) {
+    el.innerHTML = `
+      <div class="grid">
+        <div class="card"><h3>Thêm từ</h3>
+          <form id="wdForm" class="row" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
+            <label class="field">Chữ Hán<input name="h" required lang="zh-CN"></label>
+            <label class="field">Pinyin<input name="p" required placeholder="xuésheng"></label>
+            <label class="field" style="flex:1;min-width:160px">Nghĩa<input name="m" required></label>
+            <button class="btn">Thêm</button></form>
+          <p class="small muted">Thêm từ mới gặp trong New HSK Course. Từ thêm vào sẽ xuất hiện trong thẻ từ như từ mới.</p></div>
+        <div class="card"><h3>Dán nhiều từ</h3>
+          <textarea id="wdBulk" rows="5" style="width:100%" placeholder="学生 | xuésheng | học sinh&#10;老师	lǎoshī	giáo viên"></textarea>
+          <button type="button" class="btn" id="wdImport" style="margin-top:6px">Thêm các dòng này</button>
+          <p class="small muted">Mỗi dòng: chữ Hán, pinyin, nghĩa, cách nhau bằng dấu | hoặc phím Tab (chép từ Excel hay Anki đều được).</p></div>
+      </div>
+      <div class="card"><h3>Từ bạn đã thêm (${state.myWords.length})</h3>
+        ${state.myWords.length ? `<table><tr><th>Chữ</th><th>Pinyin</th><th>Nghĩa</th><th></th></tr>${state.myWords.map((w, i) => `<tr><td lang="zh-CN">${esc(w.h)}</td><td>${esc(w.p)}</td><td>${esc(w.m)}</td><td><button class="link" data-wdel="${i}">Xóa</button></td></tr>`).join("")}</table>` : `<p class="muted">Chưa có.</p>`}</div>`;
+    const known = new Set(deck().map((w) => w.h));
+    el.querySelector("#wdForm").onsubmit = (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const w = { h: f.get("h").trim(), p: f.get("p").trim(), m: f.get("m").trim() };
+      if (known.has(w.h)) { toast("Từ này đã có trong bộ thẻ."); return; }
+      state.myWords.push(w);
+      save();
+      renderPracticeBody();
+      toast("Đã thêm");
+    };
+    el.querySelector("#wdImport").onclick = () => {
+      const { out, bad } = parseWords(el.querySelector("#wdBulk").value);
+      const add = out.filter((w) => !known.has(w.h) && known.add(w.h));
+      state.myWords.push(...add);
+      save();
+      renderPracticeBody();
+      toast(`Đã thêm ${add.length} từ${out.length > add.length ? `, bỏ ${out.length - add.length} từ trùng` : ""}${bad.length ? `, ${bad.length} dòng không đọc được` : ""}`);
+    };
+    el.querySelectorAll("[data-wdel]").forEach((b) => (b.onclick = () => {
+      const w = state.myWords.splice(Number(b.dataset.wdel), 1)[0];
+      delete state.cards[w.h];
+      save();
+      renderPracticeBody();
+    }));
+  }
+
   function renderPracticeBody() {
     const el = document.getElementById("practiceBody");
     if (!el) return;
-    if (pr.view === "sim") renderSim(el);
-    else if (pr.view === "hand") renderHand(el);
-    else if (pr.view === "quiz") renderQuiz(el);
-    else renderReview(el);
+    const views = { sim: renderSim, hand: renderHand, quiz: renderQuiz, review: renderReview, test: renderTest, writing: renderWriting, speaking: renderSpeaking, cards: renderCards, tones: renderTones, words: renderWords };
+    views[pr.view](el);
     const n = dueList().length;
     const b = document.querySelector('[data-pview="review"]');
     if (b) b.textContent = `Ôn lại${n ? ` (${n})` : ""}`;
   }
 
+  function stopAllTimers() {
+    stopSim();
+    tStop();
+    stopSpeak();
+    if (pr.stopWriting) pr.stopWriting();
+  }
+
   function renderPractice() {
     const el = document.getElementById("tab-practice");
-    el.innerHTML = `<h2>Luyện tập Đồ thị + OOP</h2>
-      <div class="chips" style="margin-bottom:14px">${PVIEWS.map(([k, n]) => `<button type="button" class="chip ${pr.view === k ? "active" : ""}" data-pview="${k}">${n}</button>`).join("")}</div>
+    if (!pr.view) pr.view = today() <= S().exam30End ? "sim" : "test";
+    const subj = subjectOfView(pr.view);
+    el.innerHTML = `<h2>Luyện tập</h2>
+      <div class="chips subj" style="margin-bottom:8px">${PSUBJ.map(([k, n]) => `<button type="button" class="chip ${subj === k ? "active" : ""}" data-psubj="${k}">${n}</button>`).join("")}</div>
+      <div class="chips views" style="margin-bottom:14px">${PVIEWS[subj].map(([k, n]) => `<button type="button" class="chip ${pr.view === k ? "active" : ""}" data-pview="${k}">${n}</button>`).join("")}</div>
       <div id="practiceBody"></div>`;
-    el.querySelectorAll("[data-pview]").forEach((b) => (b.onclick = () => { stopSim(); pr.view = b.dataset.pview; pr.revSnap = null; pr.qOpen = {}; renderPractice(); }));
+    const go = (v) => { stopAllTimers(); pr.view = v; pr.revSnap = null; pr.qOpen = {}; renderPractice(); };
+    el.querySelectorAll("[data-pview]").forEach((b) => (b.onclick = () => go(b.dataset.pview)));
+    el.querySelectorAll("[data-psubj]").forEach((b) => (b.onclick = () => go(PVIEWS[b.dataset.psubj][0][0])));
     renderPracticeBody();
   }
 
-  // Mở phần luyện tập từ nơi khác: "sim:bfs", "hand:dijkstra", "quiz:g-bfs", "review"
+  // Mở phần luyện tập từ nơi khác: "sim:bfs", "hand:dijkstra", "quiz:g-bfs", "review", "test:c5t1", "writing", "cards"
   function openPractice(spec) {
     const [kind, arg] = spec.split(":");
-    stopSim();
+    stopAllTimers();
+    if (kind === "test" && arg) pr.tTest = arg;
     if (kind === "sim" && GA.ALGOS[arg]) { pr.algo = arg; pr.step = 0; }
     if (kind === "hand" && GA.ALGOS[arg]) { pr.hAlgo = arg; newHand(); }
     if (kind === "quiz") { const t = topicById(arg); if (t) { pr.qSubject = t.subject; pr.qTopic = arg; } }
