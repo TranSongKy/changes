@@ -10,6 +10,7 @@
       ieltsStartBand: 4.5,
       ieltsTargetBand: 7.0,
       hskStartWords: 50,
+      hskStandard: "3.0",
       hskTargetLevel: 4,
       hoursPerBand: 250,
       weeklyIeltsHours: 13,
@@ -56,7 +57,7 @@
       { id: 2, name: "Kỹ năng IELTS", from: "2027-03-01", to: "2027-08-31", band: 6.5,
         focus: "Dạng bài từng kỹ năng, từ vựng theo chủ đề, viết 3 bài/tuần, nói ghi âm mỗi ngày" },
       { id: 3, name: "Luyện đề", from: "2027-09-01", to: "2027-12-31", band: 7.0,
-        focus: "Cambridge IELTS 15–20 bấm giờ, sửa Writing với người chấm, Speaking với bạn hoặc giáo viên" },
+        focus: "Đề Cambridge IELTS 5, 6, 7, 9 bấm giờ mỗi thứ Bảy (lịch ở tab Thư viện), sửa Writing với người chấm, Speaking với bạn hoặc giáo viên" },
     ],
 
     // Buổi mẫu theo thứ (0 = Chủ nhật). Mỗi mục: [kỹ năng, phút, việc]
@@ -90,25 +91,53 @@
       },
     },
 
-    hskLevels: [
-      { level: 1, words: 150 },
-      { level: 2, words: 300 },
-      { level: 3, words: 600 },
-      { level: 4, words: 1200 },
-      { level: 5, words: 2500 },
-      { level: 6, words: 5000 },
-    ],
-
-    hskPhases: [
-      { id: 1, name: "HSK 1–2", from: "2026-11-17", to: "2027-02-28", words: 300, minutes: 45,
-        focus: "Chốt thanh điệu và pinyin, 50 bộ thủ hay gặp, viết chữ, HSK Standard Course 1–2" },
-      { id: 2, name: "HSK 3", from: "2027-03-01", to: "2027-08-31", words: 600, minutes: 60,
-        focus: "HSK Standard Course 3, nghe hội thoại chậm, đọc truyện phân cấp, thi thử HSK 3" },
-      { id: 3, name: "Giữ nhịp", from: "2027-09-01", to: "2027-12-31", words: 900, minutes: 45,
-        focus: "Anki + 1 bài HSK 4 mỗi 2 ngày, ưu tiên IELTS" },
-      { id: 4, name: "HSK 4", from: "2028-01-01", to: "2028-04-30", words: 1200, minutes: 90,
-        focus: "Luyện đề HSK 4, thi HSK 4 + HSKK" },
-    ],
+    // Hai chuẩn HSK: số từ là tổng tích lũy tới hết cấp đó. Chọn chuẩn ở tab Cài đặt.
+    // phases[].materials: sách và danh sách từ vựng trong Thư viện dùng cho giai đoạn (nếu có).
+    hskStandards: {
+      "3.0": {
+        name: "HSK 3.0 (9 cấp)",
+        levels: [
+          { level: 1, words: 500 },
+          { level: 2, words: 1272 },
+          { level: 3, words: 2245 },
+          { level: 4, words: 3245 },
+          { level: 5, words: 4316 },
+          { level: 6, words: 5456 },
+          { level: 7, label: "7–9", words: 11092 },
+        ],
+        phases: [
+          { id: 1, name: "HSK 1", from: "2026-11-17", to: "2027-02-28", words: 600, minutes: 60, materials: { course: 1, vocab: [1] },
+            focus: "Chốt thanh điệu và pinyin, 50 bộ thủ hay gặp, viết chữ, New HSK Course 1, học hết từ vựng HSK 1" },
+          { id: 2, name: "HSK 2", from: "2027-03-01", to: "2027-08-31", words: 1600, minutes: 60, materials: { course: 2, vocab: [2] },
+            focus: "New HSK Course 2, từ vựng HSK 2, nghe hội thoại chậm, đọc truyện phân cấp, thi thử HSK 2" },
+          { id: 3, name: "HSK 3, giữ nhịp", from: "2027-09-01", to: "2027-12-31", words: 2300, minutes: 45, materials: { vocab: [3] },
+            focus: "Anki từ vựng HSK 3 mỗi ngày, 1 bài đọc mỗi 2 ngày, ưu tiên IELTS" },
+          { id: 4, name: "HSK 4", from: "2028-01-01", to: "2028-04-30", words: 3245, minutes: 90, materials: { vocab: [3, 4] },
+            focus: "Từ vựng HSK 4, luyện đề HSK 4, thi HSK 4 + HSKK" },
+        ],
+      },
+      "2.0": {
+        name: "HSK 2.0 (6 cấp)",
+        levels: [
+          { level: 1, words: 150 },
+          { level: 2, words: 300 },
+          { level: 3, words: 600 },
+          { level: 4, words: 1200 },
+          { level: 5, words: 2500 },
+          { level: 6, words: 5000 },
+        ],
+        phases: [
+          { id: 1, name: "HSK 1–2", from: "2026-11-17", to: "2027-02-28", words: 300, minutes: 45, materials: { course: 1 },
+            focus: "Chốt thanh điệu và pinyin, 50 bộ thủ hay gặp, viết chữ, HSK Standard Course 1–2" },
+          { id: 2, name: "HSK 3", from: "2027-03-01", to: "2027-08-31", words: 600, minutes: 60, materials: { course: 2 },
+            focus: "HSK Standard Course 3, nghe hội thoại chậm, đọc truyện phân cấp, thi thử HSK 3" },
+          { id: 3, name: "Giữ nhịp", from: "2027-09-01", to: "2027-12-31", words: 900, minutes: 45,
+            focus: "Anki + 1 bài HSK 4 mỗi 2 ngày, ưu tiên IELTS" },
+          { id: 4, name: "HSK 4", from: "2028-01-01", to: "2028-04-30", words: 1200, minutes: 90,
+            focus: "Luyện đề HSK 4, thi HSK 4 + HSKK" },
+        ],
+      },
+    },
 
     hskSession: [
       [15, "Ôn Anki (chữ Hán, pinyin, âm thanh)"],
@@ -119,8 +148,8 @@
 
     milestones: [
       { date: "2026-11-16", label: "Thi Đồ thị + OOP" },
-      { date: "2027-02-28", label: "IELTS thử 5.5, HSK 300 từ" },
-      { date: "2027-08-31", label: "IELTS thử 6.5, HSK 3" },
+      { date: "2027-02-28", label: "IELTS thử 5.5, xong HSK giai đoạn 1" },
+      { date: "2027-08-31", label: "IELTS thử 6.5, xong HSK giai đoạn 2" },
       { date: "2027-12-01", label: "Thi IELTS, chọn HSK 4 hay 5" },
       { date: "2028-04-15", label: "Thi HSK" },
       { date: "2028-06-30", label: "Tốt nghiệp (giả định)" },

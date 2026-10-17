@@ -281,3 +281,7 @@ ol.ex label input:checked + span { color: var(--muted); }
 details.ans { margin: 4px 0 0 24px; font-size: 14px; }
 details.ans summary { color: var(--accent); cursor: pointer; font-size: 13px; }
 details.ans > div { background: var(--good-soft); border-radius: 8px; padding: 8px 10px; margin-top: 4px; }
+/* ---------- Thư viện ---------- */
+a.doclink { display: inline-block; text-decoration: none; }
+#tab-shelf ul.checks .mins a { margin-left: 2px; }
+#tab-shelf td { vertical-align: top; }

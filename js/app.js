@@ -3,6 +3,9 @@
   const L = window.Logic;
   const P = window.PLAN;
   const LIB = window.LIBRARY;
+  const M = window.Materials;
+  // Danh sách tài liệu trên máy bạn (materials/library-data.js); không có thì tab Thư viện hướng dẫn cách tạo.
+  const MAT = window.MATERIALS && Array.isArray(window.MATERIALS.items) ? window.MATERIALS.items : null;
   const KEY = "lotrinh.v1";
 
   const SUBJECTS = {
@@ -14,7 +17,7 @@
 
   // ---------- trạng thái ----------
   function blank() {
-    return { settings: { ...P.defaults, viewDate: "" }, done30: {}, daily: {}, logs: [], mocks: [], hskWords: [], exDone: {} };
+    return { settings: { ...P.defaults, viewDate: "" }, done30: {}, daily: {}, logs: [], mocks: [], hskWords: [], exDone: {}, matDone: {} };
   }
 
   function load() {
@@ -107,6 +110,16 @@
     return mins / 60 / weeks;
   }
 
+  const hskStd = () => P.hskStandards[S().hskStandard] || P.hskStandards["3.0"];
+  const lvlName = (n) => {
+    const l = hskStd().levels.find((x) => x.level === Number(n));
+    return l && l.label ? l.label : String(n);
+  };
+  function hskPhaseAt(d) {
+    const ps = hskStd().phases;
+    return L.phaseAt(ps, d) || ps[d < ps[0].from ? 0 : ps.length - 1];
+  }
+
   function knownWords() {
     const w = [...state.hskWords].sort((a, b) => (a.date < b.date ? 1 : -1))[0];
     return w ? w.words : S().hskStartWords;
@@ -121,6 +134,43 @@
     return LIB.topics.find((t) => t.subject === "ielts" && (t.skills || []).includes(skill));
   }
   const docLink = (t, label = "Tài liệu") => (t ? `<button type="button" class="doclink" data-topic="${t.id}" title="${esc(t.title)}">${label}</button>` : "");
+
+  // ---------- tài liệu của bạn (materials/) ----------
+  const mats = (pred) => (MAT || []).filter(pred);
+  const matByKey = (k) => (MAT || []).find((x) => x.key === k);
+  const mb = (n) => (!n ? "" : n < 1048576 ? `${Math.max(Math.round(n / 1024), 1)} KB` : `${(n / 1048576).toLocaleString("vi-VN", { maximumFractionDigits: 1 })} MB`);
+  const matLink = (x, label) => (x ? `<a class="doclink" href="${esc(x.file || x.drive)}" target="_blank" rel="noopener noreferrer" title="${esc(x.title)}">${esc(label || x.title)}</a>` : "");
+  const matOpen = (x) => [
+    x.file ? `<a href="${esc(x.file)}" target="_blank" rel="noopener">Mở</a>` : "",
+    x.drive ? `<a href="${esc(x.drive)}" target="_blank" rel="noopener noreferrer">Drive</a>` : "",
+  ].filter(Boolean).join(" · ");
+  const camLabel = (id) => id.replace(/^c(\d+)t(\d)$/, "Cambridge $1 Test $2");
+  function camTests() {
+    const books = mats((x) => x.cat === "cambridge").map((x) => x.book);
+    return books.length ? M.cambridgeSchedule(books, S().ieltsExam) : [];
+  }
+  const camMock = (id) => [...state.mocks].filter((m) => m.test === id).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+
+  // File gắn vào từng buổi IELTS: đổi file mỗi tuần để lần lượt làm hết.
+  function ieltsMat(skill, text, d) {
+    if (!MAT) return "";
+    const pick = (list) => (list.length ? list[Math.max(Math.floor(L.daysBetween(P.ieltsPhases[0].from, d) / 7), 0) % list.length] : null);
+    if (skill === "Reading") return matLink(pick(mats((x) => x.cat === "reading")), "PDF");
+    if (skill === "Writing" && /Task 1/.test(text)) return matLink(pick(mats((x) => x.cat === "writing" && x.task === 1)), "PDF");
+    if (skill === "Writing" && /Task 2/.test(text)) return matLink(pick(mats((x) => x.cat === "writing" && x.task === 2)), "PDF");
+    if (skill === "Mock") {
+      const tests = camTests();
+      const t = tests.find((x) => x.date === d);
+      if (t) return matLink(matByKey(`cambridge-${t.book}`), camLabel(t.id));
+      const y = tests.find((x) => x.date === L.addDays(d, -1));
+      if (y) return matLink(matByKey(`cambridge-${y.book}`), "Chữa " + camLabel(y.id));
+    }
+    return "";
+  }
+  function hskMats(phase) {
+    const m = phase.materials || {};
+    return [m.course && matByKey(`hsk-course-${m.course}`), ...(m.vocab || []).map((v) => matByKey(`hsk-vocab-${v}`))].filter(Boolean);
+  }
 
   // ---------- biểu đồ SVG ----------
   function lineChart({ series, yMin, yMax, yStep, target, from, to, yFmt = (v) => v }) {
@@ -210,18 +260,18 @@
       const ph = ieltsPhaseNo(d);
       const wd = L.parseDate(d).getDay();
       const ielts = (P.ieltsWeek[ph][wd] || []);
-      const hp = L.phaseAt(P.hskPhases, d) || P.hskPhases[d < P.hskPhases[0].from ? 0 : 3];
+      const hp = hskPhaseAt(d);
       const scale = hp.minutes / 60;
       const before = d < P.ieltsPhases[0].from;
       plan = `<div class="grid">
         <div class="card"><h3>IELTS · giai đoạn ${ph}${before ? " (chưa bắt đầu)" : ""}</h3>
-          ${ielts.length ? `<ul class="checks">${ielts.map((it, i) => dailyItem(d, `i${i}`, "ielts", it[1], `<span class="pill good">${it[0]}</span> ${esc(it[2])} ${docLink(ieltsTopic(it[0], it[2]))}`)).join("")}</ul>` : `<p class="muted">Hôm nay nghỉ IELTS.</p>`}
+          ${ielts.length ? `<ul class="checks">${ielts.map((it, i) => dailyItem(d, `i${i}`, "ielts", it[1], `<span class="pill good">${it[0]}</span> ${esc(it[2])} ${docLink(ieltsTopic(it[0], it[2]))}${ieltsMat(it[0], it[2], d)}`)).join("")}</ul>` : `<p class="muted">Hôm nay nghỉ IELTS.</p>`}
           ${focusHint()}
         </div>
         <div class="card"><h3>HSK · ${esc(hp.name)}</h3><ul class="checks">
           ${P.hskSession.map((s, i) => dailyItem(d, `h${i}`, "hsk", Math.round(s[0] * scale), esc(s[1]))).join("")}
         </ul><p class="small muted">${esc(hp.focus)}</p>
-          <p class="small">${docLink(hskTopic(hp.id), "Tài liệu giai đoạn này")} ${docLink(topicById("h-pinyin"), "Pinyin")} ${docLink(topicById("h-hanzi"), "Chữ Hán")}</p></div></div>`;
+          <p class="small">${docLink(hskTopic(hp.id), "Tài liệu giai đoạn này")} ${docLink(topicById("h-pinyin"), "Pinyin")} ${docLink(topicById("h-hanzi"), "Chữ Hán")}${hskMats(hp).map((x) => matLink(x)).join("")}</p></div></div>`;
     }
 
     el.innerHTML = `
@@ -400,6 +450,7 @@
   }
 
   // ---------- IELTS ----------
+  let pendingTest = ""; // đề Cambridge chọn sẵn khi bấm "Nhập điểm" ở tab Thư viện
   function renderIelts() {
     const el = document.getElementById("tab-ielts");
     const d = today();
@@ -451,15 +502,16 @@
         </div>
       </div>
       
-      <div class="card"><h3>Nhập đề thử</h3>
+      <div class="card" id="mockCard"><h3>Nhập đề thử</h3>
         <form class="row" id="mockForm">
           <label>Ngày<input type="date" name="date" value="${d}" required></label>
+          ${camTests().length ? `<label>Đề<select name="test"><option value="">Đề khác</option>${camTests().map((t) => `<option value="${t.id}" ${pendingTest === t.id ? "selected" : ""}>${camLabel(t.id)}${camMock(t.id) ? " (đã làm)" : ""}</option>`).join("")}</select></label>` : ""}
           ${L.SKILLS.map((k) => `<label>${k}<input type="number" name="${k}" min="0" max="9" step="0.5" required></label>`).join("")}
           <button class="btn">Lưu</button>
         </form>
-        <table style="margin-top:12px"><tr><th>Ngày</th>${L.SKILLS.map((k) => `<th>${k[0]}</th>`).join("")}<th>Overall</th><th></th></tr>
-          ${[...mocks].reverse().map((x) => `<tr><td>${fmtShort(x.date)}/${x.date.slice(2, 4)}</td>${L.SKILLS.map((k) => `<td>${band(x.scores[k])}</td>`).join("")}<td><b>${band(x.overall)}</b></td>
-            <td><button class="link" data-del-mock="${x.id}">Xóa</button></td></tr>`).join("") || `<tr><td colspan="7" class="muted">Chưa có đề thử nào.</td></tr>`}
+        <table style="margin-top:12px"><tr><th>Ngày</th><th>Đề</th>${L.SKILLS.map((k) => `<th>${k[0]}</th>`).join("")}<th>Overall</th><th></th></tr>
+          ${[...mocks].reverse().map((x) => `<tr><td>${fmtShort(x.date)}/${x.date.slice(2, 4)}</td><td class="small">${x.test ? camLabel(x.test) : ""}</td>${L.SKILLS.map((k) => `<td>${band(x.scores[k])}</td>`).join("")}<td><b>${band(x.overall)}</b></td>
+            <td><button class="link" data-del-mock="${x.id}">Xóa</button></td></tr>`).join("") || `<tr><td colspan="8" class="muted">Chưa có đề thử nào.</td></tr>`}
         </table></div>`;
 
     el.querySelector("#mockForm").onsubmit = (e) => {
@@ -467,7 +519,8 @@
       const f = new FormData(e.target);
       const scores = {};
       L.SKILLS.forEach((k) => (scores[k] = Number(f.get(k))));
-      state.mocks.push({ id: Date.now(), date: f.get("date"), scores, overall: L.ieltsOverall(scores.Listening, scores.Reading, scores.Writing, scores.Speaking) });
+      state.mocks.push({ id: Date.now(), date: f.get("date"), test: f.get("test") || "", scores, overall: L.ieltsOverall(scores.Listening, scores.Reading, scores.Writing, scores.Speaking) });
+      pendingTest = "";
       save();
       renderAll();
       toast("Đã lưu đề thử");
@@ -484,15 +537,16 @@
     const el = document.getElementById("tab-hsk");
     const d = today();
     const known = knownWords();
-    const pr = L.hskProjection({ knownWords: known, targetLevel: Number(S().hskTargetLevel), levels: P.hskLevels, today: d, exam: S().hskExam });
-    const ph = L.phaseAt(P.hskPhases, d);
+    const std = hskStd();
+    const pr = L.hskProjection({ knownWords: known, targetLevel: Number(S().hskTargetLevel), levels: std.levels, today: d, exam: S().hskExam });
+    const ph = L.phaseAt(std.phases, d);
     const phTarget = ph ? ph.words : null;
     const phDays = ph ? Math.max(L.daysBetween(d, ph.to), 1) : 0;
     const words = [...state.hskWords].sort((a, b) => (a.date < b.date ? -1 : 1));
-    const planLine = [{ x: P.hskPhases[0].from, y: S().hskStartWords }, ...P.hskPhases.map((p) => ({ x: p.to, y: p.words }))];
+    const planLine = [{ x: std.phases[0].from, y: S().hskStartWords }, ...std.phases.map((p) => ({ x: p.to, y: p.words }))];
     const yMax = Math.max(1400, pr.targetWords + 200, known + 200);
     const chart = lineChart({
-      from: P.hskPhases[0].from, to: S().hskExam > "2028-04-30" ? S().hskExam : "2028-04-30",
+      from: std.phases[0].from, to: S().hskExam > "2028-04-30" ? S().hskExam : "2028-04-30",
       yMin: 0, yMax: Math.ceil(yMax / 200) * 200, yStep: yMax > 2000 ? 500 : 200, target: pr.targetWords,
       series: [
         { color: "var(--muted)", dashed: true, width: 1.5, points: planLine },
@@ -501,32 +555,33 @@
     });
 
     el.innerHTML = `
-      <h2>HSK: mục tiêu HSK ${S().hskTargetLevel}</h2>
+      <h2>HSK: mục tiêu HSK ${lvlName(S().hskTargetLevel)} <span class="pill hsk">${esc(std.name)}</span></h2>
       <div class="grid">
-        <div class="card"><div class="muted small">Số từ đã thuộc</div><div class="stat">${known} <small>/ ${pr.targetWords}</small></div>
+        <div class="card"><div class="muted small">Số từ đã thuộc</div><div class="stat">${num(known)} <small>/ ${num(pr.targetWords)}</small></div>
           <div class="bar"><span style="width:${pct(known, pr.targetWords)}%;background:var(--hsk)"></span></div>
-          <div class="small muted">Tương đương ${pr.level ? "HSK " + pr.level : "chưa đủ HSK 1"}</div></div>
+          <div class="small muted">Tương đương ${pr.level ? "HSK " + lvlName(pr.level) : "chưa đủ HSK 1"}</div></div>
         <div class="card"><div class="muted small">Cần học mỗi ngày tới ngày thi</div><div class="stat">${num(Math.ceil(pr.perDay * 10) / 10)} <small>từ mới/ngày</small></div>
           <div class="small muted">Còn ${pr.daysLeft} ngày tới ${fmtShort(S().hskExam)}/${S().hskExam.slice(2, 4)}</div></div>
         <div class="card"><div class="muted small">Mốc giai đoạn hiện tại</div>
-          ${ph ? `<div class="stat">${num(Math.max(Math.ceil(((phTarget - known) / phDays) * 10) / 10, 0))} <small>từ/ngày</small></div><div class="small muted">để đạt ${phTarget} từ trước ${fmtShort(ph.to)}/${ph.to.slice(2, 4)}</div>`
+          ${ph ? `<div class="stat">${num(Math.max(Math.ceil(((phTarget - known) / phDays) * 10) / 10, 0))} <small>từ/ngày</small></div><div class="small muted">để đạt ${num(phTarget)} từ trước ${fmtShort(ph.to)}/${ph.to.slice(2, 4)}</div>`
             : `<div class="muted">Ngoài các giai đoạn đã lên lịch.</div>`}</div>
       </div>
       
       <div class="card"><h3>Số từ theo thời gian</h3>${chart}
-        <div class="legend"><span><i style="background:var(--hsk)"></i>Số từ bạn nhập</span><span><i style="background:var(--muted)"></i>Lộ trình dự kiến</span><span><i style="background:var(--warn)"></i>Mục tiêu HSK ${S().hskTargetLevel}</span></div></div>
+        <div class="legend"><span><i style="background:var(--hsk)"></i>Số từ bạn nhập</span><span><i style="background:var(--muted)"></i>Lộ trình dự kiến</span><span><i style="background:var(--warn)"></i>Mục tiêu HSK ${lvlName(S().hskTargetLevel)}</span></div></div>
       <div class="grid">
         <div class="card"><h3>Cập nhật số từ</h3>
           <form class="row" id="wordForm"><label>Ngày<input type="date" name="date" value="${d}"></label>
             <label>Số từ đã thuộc<input type="number" name="words" min="0" value="${known}"></label><button class="btn">Lưu</button></form>
           <p class="small muted">Lấy số thẻ đã "mature" hoặc đã học trong Anki là đủ chính xác.</p></div>
         <div class="card"><h3>Các giai đoạn</h3><table><tr><th>Giai đoạn</th><th>Đến</th><th>Từ</th><th>Phút/ngày</th></tr>
-          ${P.hskPhases.map((p) => `<tr ${ph && ph.id === p.id ? 'style="font-weight:600"' : ""}><td>${esc(p.name)}</td><td>${fmtShort(p.to)}/${p.to.slice(2, 4)}</td><td>${p.words}</td><td>${p.minutes}</td></tr>`).join("")}</table></div>
+          ${std.phases.map((p) => `<tr ${ph && ph.id === p.id ? 'style="font-weight:600"' : ""}><td>${esc(p.name)}</td><td>${fmtShort(p.to)}/${p.to.slice(2, 4)}</td><td>${num(p.words)}</td><td>${p.minutes}</td></tr>`).join("")}</table>
+          ${MAT && ph && hskMats(ph).length ? `<p class="small">Tài liệu giai đoạn này: ${hskMats(ph).map((x) => matLink(x)).join("")}</p>` : ""}</div>
       </div>
       
-      <div class="card"><h3>Mức HSK và số từ</h3><table><tr><th>Cấp</th><th>Từ vựng (chuẩn HSK 2.0)</th><th></th></tr>
-        ${P.hskLevels.map((l) => `<tr><td>HSK ${l.level}</td><td>${l.words}</td><td>${known >= l.words ? '<span class="pill good">Đạt</span>' : ""}</td></tr>`).join("")}</table>
-        <p class="small muted">Nếu trung tâm thi đã chuyển sang chuẩn HSK 3.0 (9 cấp), số từ mỗi cấp sẽ khác. Sửa trong js/data.js.</p></div>`;
+      <div class="card"><h3>Mức HSK và số từ</h3><table><tr><th>Cấp</th><th>Tổng số từ (${esc(std.name)})</th><th></th></tr>
+        ${std.levels.map((l) => `<tr><td>HSK ${l.label || l.level}</td><td>${num(l.words)}</td><td>${known >= l.words ? '<span class="pill good">Đạt</span>' : ""}</td></tr>`).join("")}</table>
+        <p class="small muted">Số từ là tổng tích lũy từ HSK 1 tới hết cấp đó. Đổi giữa chuẩn HSK 3.0 và 2.0 ở tab Cài đặt; trước khi đăng ký thi, hỏi trung tâm thi đang dùng chuẩn nào.</p></div>`;
 
     el.querySelector("#wordForm").onsubmit = (e) => {
       e.preventDefault();
@@ -648,6 +703,105 @@
     if (el) el.scrollIntoView({ block: "start" });
   }
 
+  // ---------- Thư viện (PDF trên máy bạn) ----------
+  function shelfItem(x, extra = "") {
+    const on = !!state.matDone[x.key];
+    const meta = [x.note, mb(x.size), x.file ? "" : "chỉ có trên Drive"].filter(Boolean).join(" · ");
+    return `<li><input type="checkbox" data-mat="${esc(x.key)}" ${on ? "checked" : ""}>
+      <span class="${on ? "done" : ""}"><b>${esc(x.title)}</b>${extra}${meta ? `<br><span class="small muted">${esc(meta)}</span>` : ""}</span>
+      <span class="mins">${matOpen(x)}</span></li>`;
+  }
+  const shelfList = (list, extra) => (list.length ? `<ul class="checks">${list.map((x) => shelfItem(x, extra ? extra(x) : "")).join("")}</ul>` : `<p class="muted small">Chưa có file nào.</p>`);
+
+  function renderShelf() {
+    const el = document.getElementById("tab-shelf");
+    if (!MAT) {
+      el.innerHTML = `<h2>Thư viện</h2><div class="card"><p>Máy này chưa có danh sách tài liệu.</p>
+        <ol class="small"><li>Chép các PDF vào thư mục <code>materials/</code> cạnh <code>index.html</code>, ví dụ <code>materials/ielts/cambridge/Cambridge 7.pdf</code>.</li>
+        <li>Nếu có danh sách file Google Drive, đặt ở <code>materials/inventory.json</code> để có thêm link Drive.</li>
+        <li>Chạy <code>npm run materials</code> rồi tải lại trang.</li></ol>
+        <p class="small muted">Thư mục materials/ nằm trong .gitignore nên sách và đề không bị đưa lên GitHub.</p></div>`;
+      return;
+    }
+    const d = today();
+    const tests = camTests();
+    const doneTests = tests.filter((t) => camMock(t.id)).length;
+    const next = tests.find((t) => !camMock(t.id) && t.date >= d) || tests.find((t) => !camMock(t.id));
+    const std = hskStd();
+    const ph = L.phaseAt(std.phases, d);
+    const phaseOf = (pred) => std.phases.filter((p) => pred(p.materials || {})).map((p) => p.name);
+    const words30 = P.hskStandards["3.0"].levels;
+    const by = (cat, pred = () => true) => mats((x) => x.cat === cat && pred(x));
+    const local = mats((x) => x.file).length;
+
+    const camRows = tests.map((t) => {
+      const m = camMock(t.id);
+      const book = matByKey(`cambridge-${t.book}`);
+      const cls = next && next.id === t.id ? ' style="font-weight:600"' : t.date < d && !m ? ' class="muted"' : "";
+      return `<tr${cls}><td>${fmt(t.date)}</td><td>${camLabel(t.id)}</td><td>${book ? matOpen(book) : ""}</td>
+        <td>${m ? `<b>${band(m.overall)}</b> <span class="small muted">${L.SKILLS.map((k) => k[0] + " " + band(m.scores[k])).join(" · ")}</span>` : ""}</td>
+        <td><button type="button" class="doclink" data-score="${t.id}">${m ? "Nhập lại" : "Nhập điểm"}</button></td></tr>`;
+    }).join("");
+
+    el.innerHTML = `
+      <h2>Thư viện: sách và đề của bạn</h2>
+      <div class="grid">
+        <div class="card"><div class="muted small">Đề Cambridge đã làm</div><div class="stat">${doneTests} <small>/ ${tests.length} đề</small></div>
+          <div class="bar"><span style="width:${pct(doneTests, tests.length)}%;background:var(--ielts)"></span></div></div>
+        <div class="card"><div class="muted small">Đề tiếp theo</div><div class="stat" style="font-size:20px">${next ? camLabel(next.id) : "Đã làm hết"}</div>
+          <div class="small muted">${next ? fmt(next.date) : ""}</div></div>
+        <div class="card"><div class="muted small">Tài liệu</div><div class="stat">${MAT.length} <small>file</small></div>
+          <div class="small muted">${local} file mở thẳng trên máy${MAT.length > local ? `, ${MAT.length - local} chỉ có trên Drive` : ""}</div></div>
+      </div>
+
+      ${tests.length ? `<div class="card"><h3>Luyện đề Cambridge IELTS</h3>
+        <p class="small muted">Mỗi thứ Bảy làm một đề đủ 4 kỹ năng có bấm giờ, Chủ nhật chữa đề. Lịch tự lùi theo ngày thi IELTS trong Cài đặt, đề cuối cùng cách ngày thi vài ngày. Đáp án và transcript nằm ở cuối mỗi sách. File PDF không có audio, nên phần Listening cần audio đúng cuốn sách đó.</p>
+        <div style="overflow-x:auto"><table><tr><th>Ngày</th><th>Đề</th><th>Sách</th><th>Điểm</th><th></th></tr>${camRows}</table></div></div>` : ""}
+
+      <div class="grid">
+        <div class="card"><h3>IELTS Reading theo dạng câu hỏi</h3>
+          <p class="small muted">Các buổi Reading ở tab Hôm nay lần lượt mở từng file này, mỗi tuần một dạng.</p>
+          ${shelfList(by("reading"))}</div>
+        <div class="card"><h3>IELTS Writing Task 1</h3>
+          <p class="small muted">Các buổi Writing Task 1 lần lượt mở từng file, mỗi tuần một dạng biểu đồ.</p>
+          ${shelfList(by("writing", (x) => x.task === 1))}</div>
+      </div>
+      <div class="grid">
+        <div class="card"><h3>IELTS Writing Task 2</h3>${shelfList(by("writing", (x) => x.task === 2))}</div>
+        <div class="card"><h3>Đề luyện Writing đầy đủ</h3>
+          <p class="small muted">Làm đề trước trong 60 phút, sau đó mới mở bài mẫu.</p>
+          ${shelfList(by("writing", (x) => x.task === 0))}</div>
+      </div>
+
+      <div class="card"><h3>Giáo trình HSK</h3>
+        ${shelfList(by("course"), (x) => { const ps = phaseOf((m) => m.course === x.book); return ps.length ? ` <span class="pill hsk">${esc(ps.join(", "))}</span>` : ""; })}</div>
+      <div class="card"><h3>Từ vựng HSK theo cấp</h3>
+        <p class="small muted">Các danh sách này theo chuẩn HSK 3.0. Số từ ghi bên cạnh là tổng tích lũy tới hết cấp đó.${ph && hskMats(ph).length ? " Cấp đang học được đánh dấu." : ""}</p>
+        ${shelfList(by("vocab"), (x) => {
+          const lv = words30.find((l) => l.level === x.level);
+          const cur = ph && (ph.materials && ph.materials.vocab || []).includes(x.level);
+          return `${lv ? ` <span class="small muted">${num(lv.words)} từ</span>` : ""}${cur ? ' <span class="pill good">Đang học</span>' : ""}${std === P.hskStandards["3.0"] && Number(S().hskTargetLevel) === x.level ? ' <span class="pill warn">Mục tiêu</span>' : ""}`;
+        })}</div>
+      <div class="grid">
+        <div class="card"><h3>Giấy luyện viết</h3><p class="small muted">In ra, dùng trong 10 phút viết tay mỗi buổi HSK.</p>${shelfList(by("paper"))}</div>
+        ${by("other").length ? `<div class="card"><h3>Tài liệu khác</h3>${shelfList(by("other"))}</div>` : ""}
+      </div>
+      <p class="small muted">Danh sách tạo lúc ${esc(new Date(window.MATERIALS.generated).toLocaleString("vi-VN"))}. Thêm hoặc đổi tên file trong materials/ thì chạy lại <code>npm run materials</code>.</p>`;
+
+    el.querySelectorAll("[data-mat]").forEach((cb) => (cb.onchange = () => {
+      if (cb.checked) state.matDone[cb.dataset.mat] = realToday();
+      else delete state.matDone[cb.dataset.mat];
+      save();
+      renderShelf();
+    }));
+    el.querySelectorAll("[data-score]").forEach((b) => (b.onclick = () => {
+      pendingTest = b.dataset.score;
+      showTab("ielts");
+      renderIelts();
+      document.getElementById("mockCard").scrollIntoView({ block: "start" });
+    }));
+  }
+
   // ---------- Nhật ký ----------
   function renderLog() {
     const el = document.getElementById("tab-log");
@@ -687,6 +841,12 @@
   }
 
   // ---------- Cài đặt ----------
+  function levelOptions(stdKey, current) {
+    const levels = (P.hskStandards[stdKey] || hskStd()).levels;
+    const cur = levels.some((l) => l.level === Number(current)) ? Number(current) : levels[levels.length - 1].level;
+    return levels.map((l) => `<option value="${l.level}" ${cur === l.level ? "selected" : ""}>${l.label || l.level}</option>`).join("");
+  }
+
   function renderSettings() {
     const el = document.getElementById("tab-settings");
     const s = S();
@@ -707,7 +867,8 @@
           ${field("weeklyIeltsHours", "Mục tiêu giờ IELTS/tuần", "number", 'min="0" step="0.5"')}
           ${field("weeklyHskHours", "Mục tiêu giờ HSK/tuần", "number", 'min="0" step="0.5"')}
           ${field("hskStartWords", "Số từ tiếng Trung đã biết lúc đầu", "number", 'min="0"')}
-          <label class="field">HSK mục tiêu<select name="hskTargetLevel">${P.hskLevels.map((l) => `<option ${Number(s.hskTargetLevel) === l.level ? "selected" : ""}>${l.level}</option>`).join("")}</select></label>
+          <label class="field">Chuẩn HSK<select name="hskStandard">${Object.entries(P.hskStandards).map(([k, v]) => `<option value="${k}" ${s.hskStandard === k ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select></label>
+          <label class="field">HSK mục tiêu<select name="hskTargetLevel">${levelOptions(s.hskStandard, s.hskTargetLevel)}</select></label>
         </div>
         <p class="small muted">Lịch 30 ngày luôn có 30 mục việc; nếu khoảng ngày ngắn hơn, việc sẽ được dồn lại khi bạn bị trễ. Kế hoạch IELTS/HSK theo tuần sửa trong js/data.js.</p>
         <button class="btn">Lưu cài đặt</button>
@@ -720,6 +881,10 @@
           <button class="btn ghost" id="resetBtn" style="color:var(--bad)">Xóa toàn bộ</button>
         </div></div>`;
 
+    el.querySelector('[name="hskStandard"]').onchange = (e) => {
+      const t = el.querySelector('[name="hskTargetLevel"]');
+      t.innerHTML = levelOptions(e.target.value, t.value);
+    };
     el.querySelector("#setForm").onsubmit = (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
@@ -776,6 +941,7 @@
     renderIelts();
     renderHsk();
     renderLibrary();
+    renderShelf();
     renderLog();
     renderSettings();
   }
