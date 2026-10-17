@@ -1139,7 +1139,7 @@
       const ok = PR.grade(q, resp);
       pr.qOpen[q.id] = { resp, ok };
       const prev = state.quizDone[q.id];
-      state.quizDone[q.id] = { ok: ok || !!(prev && prev.ok && ok), date: realToday(), tries: (prev ? prev.tries : 0) + 1 };
+      state.quizDone[q.id] = { ok, date: realToday(), tries: (prev ? prev.tries : 0) + 1 };
       const key = `q:${q.id}`;
       if (!ok || state.srs[key]) state.srs[key] = PR.review(state.srs[key], ok, realToday());
       save();
@@ -1187,8 +1187,10 @@
   function renderReview(el) {
     const items = dueList();
     const all = Object.keys(state.srs).filter((k) => state.srs[k].due).length;
-    const cards = items.map((it) => {
-      const [kind, ...rest] = it.key.split(":");
+    // Giữ danh sách lúc mở mục Ôn lại để câu vừa làm không biến mất trước khi kịp đọc lời giải
+    if (!pr.revSnap) pr.revSnap = items.map((it) => it.key);
+    const cards = pr.revSnap.map((key) => {
+      const [kind, ...rest] = key.split(":");
       const id = rest.join(":");
       if (kind === "q") {
         const q = QZ.find((x) => x.id === id);
@@ -1200,7 +1202,8 @@
         return `<div class="card quiz"><div class="small muted"><span class="pill ${x.t.subject}">${LIB.subjects[x.t.subject].name}</span> ${esc(x.t.title)} · bài tập trong Tài liệu</div>
           <div class="q">${x.e.q}</div>
           <details class="ans"><summary>Xem đáp án</summary><div>${x.e.a}</div></details>
-          <div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="btn" data-exgrade="${esc(id)}|1">Mình làm đúng</button><button type="button" class="btn ghost" data-exgrade="${esc(id)}|0">Vẫn sai</button></div></div>`;
+          ${items.some((it) => it.key === key) ? `<div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="btn" data-exgrade="${esc(id)}|1">Mình làm đúng</button><button type="button" class="btn ghost" data-exgrade="${esc(id)}|0">Vẫn sai</button></div>`
+            : `<p class="small ok">Đã ghi lại. Lần ôn sau: ${state.srs[key].due ? fmt(state.srs[key].due) : "không cần ôn nữa"}.</p>`}</div>`;
       }
       if (kind === "hand") {
         const A = GA.ALGOS[id];
@@ -1238,7 +1241,7 @@
     el.innerHTML = `<h2>Luyện tập Đồ thị + OOP</h2>
       <div class="chips" style="margin-bottom:14px">${PVIEWS.map(([k, n]) => `<button type="button" class="chip ${pr.view === k ? "active" : ""}" data-pview="${k}">${n}</button>`).join("")}</div>
       <div id="practiceBody"></div>`;
-    el.querySelectorAll("[data-pview]").forEach((b) => (b.onclick = () => { stopSim(); pr.view = b.dataset.pview; renderPractice(); }));
+    el.querySelectorAll("[data-pview]").forEach((b) => (b.onclick = () => { stopSim(); pr.view = b.dataset.pview; pr.revSnap = null; pr.qOpen = {}; renderPractice(); }));
     renderPracticeBody();
   }
 
@@ -1250,6 +1253,7 @@
     if (kind === "hand" && GA.ALGOS[arg]) { pr.hAlgo = arg; newHand(); }
     if (kind === "quiz") { const t = topicById(arg); if (t) { pr.qSubject = t.subject; pr.qTopic = arg; } }
     pr.view = kind;
+    pr.revSnap = null;
     showTab("practice");
     renderPractice();
     window.scrollTo(0, 0);
