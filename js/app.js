@@ -2,6 +2,7 @@
 (function () {
   const L = window.Logic;
   const P = window.PLAN;
+  const LIB = window.LIBRARY;
   const KEY = "lotrinh.v1";
 
   const SUBJECTS = {
@@ -13,7 +14,7 @@
 
   // ---------- trạng thái ----------
   function blank() {
-    return { settings: { ...P.defaults, viewDate: "" }, done30: {}, daily: {}, logs: [], mocks: [], hskWords: [] };
+    return { settings: { ...P.defaults, viewDate: "" }, done30: {}, daily: {}, logs: [], mocks: [], hskWords: [], exDone: {} };
   }
 
   function load() {
@@ -111,6 +112,16 @@
     return w ? w.words : S().hskStartWords;
   }
 
+  // ---------- liên kết tới tài liệu ----------
+  const topicById = (id) => LIB.topics.find((t) => t.id === id);
+  const topicsForDay = (subject, day) => LIB.topics.filter((t) => t.subject === subject && (t.days || []).includes(day));
+  const hskTopic = (phaseId) => LIB.topics.find((t) => t.subject === "hsk" && (t.phases || []).includes(phaseId));
+  function ieltsTopic(skill, text) {
+    if (skill === "Writing" && /Task 1/.test(text)) return topicById("i-writing1");
+    return LIB.topics.find((t) => t.subject === "ielts" && (t.skills || []).includes(skill));
+  }
+  const docLink = (t, label = "Tài liệu") => (t ? `<button type="button" class="doclink" data-topic="${t.id}" title="${esc(t.title)}">${label}</button>` : "");
+
   // ---------- biểu đồ SVG ----------
   function lineChart({ series, yMin, yMax, yStep, target, from, to, yFmt = (v) => v }) {
     const W = 640, H = 220, pl = 36, pr = 12, pt = 10, pb = 26;
@@ -190,7 +201,8 @@
       plan = `<div class="card"><h3>Ôn thi: ngày ${dayNo}/30</h3><ul class="checks">` +
         items.map((t) => `<li><input type="checkbox" data-t30="${t.id}" ${state.done30[t.id] ? "checked" : ""}>
           <span class="${state.done30[t.id] ? "done" : ""}"><span class="pill ${t.subject}">${SUBJECTS[t.subject].name}</span>
-          ${esc(t.text)} ${t.moved ? `<span class="moved small">(dời từ ngày ${t.day})</span>` : ""}</span>
+          ${esc(t.text)} ${t.moved ? `<span class="moved small">(dời từ ngày ${t.day})</span>` : ""}
+          ${t.rest ? "" : topicsForDay(t.subject, t.day).map((x) => docLink(x)).join("")}</span>
           <span class="mins">${t.rest ? "" : SUBJECTS[t.subject].minutes + "'"}</span></li>`).join("") +
         dailyItem(d, "vocab", "ielts", 20, "IELTS: 20 phút từ vựng (giữ nhịp)") +
         `</ul></div>`;
@@ -203,12 +215,13 @@
       const before = d < P.ieltsPhases[0].from;
       plan = `<div class="grid">
         <div class="card"><h3>IELTS · giai đoạn ${ph}${before ? " (chưa bắt đầu)" : ""}</h3>
-          ${ielts.length ? `<ul class="checks">${ielts.map((it, i) => dailyItem(d, `i${i}`, "ielts", it[1], `<span class="pill good">${it[0]}</span> ${esc(it[2])}`)).join("")}</ul>` : `<p class="muted">Hôm nay nghỉ IELTS.</p>`}
+          ${ielts.length ? `<ul class="checks">${ielts.map((it, i) => dailyItem(d, `i${i}`, "ielts", it[1], `<span class="pill good">${it[0]}</span> ${esc(it[2])} ${docLink(ieltsTopic(it[0], it[2]))}`)).join("")}</ul>` : `<p class="muted">Hôm nay nghỉ IELTS.</p>`}
           ${focusHint()}
         </div>
         <div class="card"><h3>HSK · ${esc(hp.name)}</h3><ul class="checks">
           ${P.hskSession.map((s, i) => dailyItem(d, `h${i}`, "hsk", Math.round(s[0] * scale), esc(s[1]))).join("")}
-        </ul><p class="small muted">${esc(hp.focus)}</p></div></div>`;
+        </ul><p class="small muted">${esc(hp.focus)}</p>
+          <p class="small">${docLink(hskTopic(hp.id), "Tài liệu giai đoạn này")} ${docLink(topicById("h-pinyin"), "Pinyin")} ${docLink(topicById("h-hanzi"), "Chữ Hán")}</p></div></div>`;
     }
 
     el.innerHTML = `
@@ -359,7 +372,8 @@
         <header><span>Ngày ${i + 1}</span><span class="muted">${fmtShort(x)}</span></header>
         ${items.map((t) => `<label><input type="checkbox" data-t30="${t.id}" ${state.done30[t.id] ? "checked" : ""}>
           <span class="dot ${t.subject}"></span><span class="${state.done30[t.id] ? "done" : ""}">${esc(t.text)}
-          ${t.moved ? `<span class="moved">· từ ngày ${t.day}</span>` : ""}</span></label>`).join("")}
+          ${t.moved ? `<span class="moved">· từ ngày ${t.day}</span>` : ""}
+          ${t.rest ? "" : topicsForDay(t.subject, t.day).map((x) => docLink(x, "tài liệu")).join("")}</span></label>`).join("")}
       </div>`;
     }).join("");
 
@@ -526,6 +540,114 @@
     };
   }
 
+  // ---------- Tài liệu ----------
+  let libSubject = "all";
+  let libQuery = "";
+  const libOpen = new Set();
+  const norm = (s) => String(s).replace(/<[^>]+>/g, " ").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase();
+  const exKey = (t, i) => `${t.id}:${i}`;
+  const exCount = (t) => t.exercises.filter((_, i) => state.exDone[exKey(t, i)]).length;
+
+  function resLink(r) {
+    const name = r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.name)}</a>` : `<b>${esc(r.name)}</b>`;
+    return `<li>${name}${r.note ? ` <span class="muted small">— ${esc(r.note)}</span>` : ""}</li>`;
+  }
+
+  function topicCard(t) {
+    const where = t.days ? `Ngày ${t.days.length > 3 ? `${t.days[0]}–${t.days[t.days.length - 1]} (ôn tập)` : t.days.join(", ")}` : "";
+    const done = exCount(t);
+    return `<details class="topic" id="topic-${t.id}" data-id="${t.id}" ${libOpen.has(t.id) ? "open" : ""}>
+      <summary><span class="pill ${t.subject}">${LIB.subjects[t.subject].name}</span> <b>${esc(t.title)}</b>
+        <span class="muted small">${where ? where + " · " : ""}<span class="${done === t.exercises.length ? "ok" : ""}">${done}/${t.exercises.length} bài tập</span></span></summary>
+      <div class="topic-body">
+        <h4>Lý thuyết</h4><ul class="theory">${t.theory.map((x) => `<li>${x}</li>`).join("")}</ul>
+        ${t.code ? `<pre><code>${esc(t.code)}</code></pre>` : ""}
+        <h4>Bài tập</h4><ol class="ex">${t.exercises.map((e, i) => `<li>
+          <label><input type="checkbox" data-ex="${exKey(t, i)}" ${state.exDone[exKey(t, i)] ? "checked" : ""}><span>${e.q}</span></label>
+          <details class="ans"><summary>Xem đáp án</summary><div>${e.a}</div></details></li>`).join("")}</ol>
+        ${t.resources && t.resources.length ? `<h4>Đọc thêm</h4><ul class="res">${t.resources.map(resLink).join("")}</ul>` : ""}
+      </div></details>`;
+  }
+
+  function renderLibrary() {
+    const el = document.getElementById("tab-library");
+    const all = LIB.topics;
+    const total = all.reduce((a, t) => a + t.exercises.length, 0);
+    const done = all.reduce((a, t) => a + exCount(t), 0);
+    const chips = [["all", "Tất cả"], ...Object.entries(LIB.subjects).map(([k, v]) => [k, v.name])];
+    el.innerHTML = `
+      <h2>Tài liệu: lý thuyết, bài tập, nguồn tham khảo</h2>
+      <div class="card"><div class="row lib-tools">
+        <div class="chips">${chips.map(([k, n]) => `<button type="button" class="chip ${libSubject === k ? "active" : ""}" data-lib-subject="${k}">${n}</button>`).join("")}</div>
+        <input type="search" id="libSearch" placeholder="Tìm chủ đề, ví dụ: dijkstra, ke thua, 把" value="${esc(libQuery)}">
+        <span class="muted small">Đã làm ${done}/${total} bài tập</span>
+      </div></div>
+      <div id="libToday"></div>
+      <div id="libRes"></div>
+      <div id="libList"></div>`;
+    el.querySelectorAll("[data-lib-subject]").forEach((b) => (b.onclick = () => {
+      libSubject = b.dataset.libSubject;
+      renderLibrary();
+    }));
+    el.querySelector("#libSearch").oninput = (e) => {
+      libQuery = e.target.value;
+      renderLibList();
+    };
+    renderLibList();
+  }
+
+  function renderLibList() {
+    const el = document.getElementById("tab-library");
+    const d = today();
+    const q = norm(libQuery.trim());
+
+    // Chủ đề của ngày đang xem trong đợt ôn thi
+    let todayHtml = "";
+    if (in30(d) && !q) {
+      const day = L.daysBetween(S().exam30Start, d) + 1;
+      const ts = ["graph", "oop"].flatMap((s) => topicsForDay(s, day)).filter((t) => libSubject === "all" || t.subject === libSubject);
+      if (ts.length) todayHtml = `<div class="alert good">Theo lịch gốc, ngày ${day}/30 học: ${ts.map((t) => docLink(t, esc(t.title))).join(" · ")}</div>`;
+    }
+    el.querySelector("#libToday").innerHTML = todayHtml;
+
+    const subs = libSubject === "all" ? Object.keys(LIB.subjects) : [libSubject];
+    el.querySelector("#libRes").innerHTML = q ? "" : `<details class="card res-card" ${libSubject !== "all" ? "open" : ""}>
+      <summary><b>Nguồn học chung${libSubject !== "all" ? ": " + LIB.subjects[libSubject].name : ""}</b> <span class="muted small">trang web, sách, công cụ</span></summary>
+      <div class="grid res-grid">${subs.map((k) => `<div><h4>${LIB.subjects[k].name}</h4><ul class="res">${LIB.subjects[k].resources.map(resLink).join("")}</ul></div>`).join("")}</div>
+    </details>`;
+
+    const list = LIB.topics.filter((t) => (libSubject === "all" || t.subject === libSubject) &&
+      (!q || norm([t.title, ...t.theory, ...t.exercises.map((e) => e.q)].join(" ")).includes(q)));
+    el.querySelector("#libList").innerHTML = list.map(topicCard).join("") ||
+      `<p class="muted">Không tìm thấy chủ đề nào${q ? ` cho “${esc(libQuery)}”` : ""}${libSubject !== "all" ? ` trong môn ${LIB.subjects[libSubject].name}. Thử chọn “Tất cả”` : ""}.</p>`;
+
+    el.querySelectorAll("details.topic").forEach((x) => x.addEventListener("toggle", () => {
+      if (x.open) libOpen.add(x.dataset.id);
+      else libOpen.delete(x.dataset.id);
+    }));
+    el.querySelectorAll("[data-ex]").forEach((cb) => (cb.onchange = () => {
+      if (cb.checked) state.exDone[cb.dataset.ex] = realToday();
+      else delete state.exDone[cb.dataset.ex];
+      save();
+      renderLibList();
+      const head = el.querySelector(".lib-tools .muted");
+      const total = LIB.topics.reduce((a, t) => a + t.exercises.length, 0);
+      head.textContent = `Đã làm ${LIB.topics.reduce((a, t) => a + exCount(t), 0)}/${total} bài tập`;
+    }));
+  }
+
+  function openTopic(id) {
+    const t = topicById(id);
+    if (!t) return;
+    libSubject = t.subject;
+    libQuery = "";
+    libOpen.add(id);
+    showTab("library");
+    renderLibrary();
+    const el = document.getElementById(`topic-${id}`);
+    if (el) el.scrollIntoView({ block: "start" });
+  }
+
   // ---------- Nhật ký ----------
   function renderLog() {
     const el = document.getElementById("tab-log");
@@ -653,6 +775,7 @@
     renderExam30();
     renderIelts();
     renderHsk();
+    renderLibrary();
     renderLog();
     renderSettings();
   }
@@ -664,6 +787,13 @@
   }
 
   document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+  // Nút "Tài liệu" ở mọi tab mở thẳng chủ đề tương ứng
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-topic]");
+    if (!b) return;
+    e.preventDefault();
+    openTopic(b.dataset.topic);
+  });
   renderAll();
   try { showTab(localStorage.getItem(KEY + ".tab") || "today"); } catch (e) { showTab("today"); }
 })();
