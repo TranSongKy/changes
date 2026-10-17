@@ -13,7 +13,7 @@
 
   // ---------- trạng thái ----------
   function blank() {
-    return { settings: { ...P.defaults, viewDate: "" }, done30: {}, daily: {}, logs: [], mocks: [], hskWords: [] };
+    return { settings: { ...P.defaults, viewDate: "" }, done30: {}, daily: {}, logs: [], mocks: [], hskWords: [], exDone: {} };
   }
 
   function load() {
@@ -190,7 +190,7 @@
       plan = `<div class="card"><h3>Ôn thi: ngày ${dayNo}/30</h3><ul class="checks">` +
         items.map((t) => `<li><input type="checkbox" data-t30="${t.id}" ${state.done30[t.id] ? "checked" : ""}>
           <span class="${state.done30[t.id] ? "done" : ""}"><span class="pill ${t.subject}">${SUBJECTS[t.subject].name}</span>
-          ${esc(t.text)} ${t.moved ? `<span class="moved small">(dời từ ngày ${t.day})</span>` : ""}</span>
+          ${esc(t.text)} ${t.moved ? `<span class="moved small">(dời từ ngày ${t.day})</span>` : ""} ${dayDocLinks(t)}</span>
           <span class="mins">${t.rest ? "" : SUBJECTS[t.subject].minutes + "'"}</span></li>`).join("") +
         dailyItem(d, "vocab", "ielts", 20, "IELTS: 20 phút từ vựng (giữ nhịp)") +
         `</ul></div>`;
@@ -203,12 +203,12 @@
       const before = d < P.ieltsPhases[0].from;
       plan = `<div class="grid">
         <div class="card"><h3>IELTS · giai đoạn ${ph}${before ? " (chưa bắt đầu)" : ""}</h3>
-          ${ielts.length ? `<ul class="checks">${ielts.map((it, i) => dailyItem(d, `i${i}`, "ielts", it[1], `<span class="pill good">${it[0]}</span> ${esc(it[2])}`)).join("")}</ul>` : `<p class="muted">Hôm nay nghỉ IELTS.</p>`}
+          ${ielts.length ? `<ul class="checks">${ielts.map((it, i) => dailyItem(d, `i${i}`, "ielts", it[1], `<span class="pill good">${it[0]}</span> ${esc(it[2])} ${docLink("ielts", SKILL_DOC[it[0]])}`)).join("")}</ul>` : `<p class="muted">Hôm nay nghỉ IELTS.</p>`}
           ${focusHint()}
         </div>
         <div class="card"><h3>HSK · ${esc(hp.name)}</h3><ul class="checks">
           ${P.hskSession.map((s, i) => dailyItem(d, `h${i}`, "hsk", Math.round(s[0] * scale), esc(s[1]))).join("")}
-        </ul><p class="small muted">${esc(hp.focus)}</p></div></div>`;
+        </ul><p class="small muted">${esc(hp.focus)}</p><p class="small">Tài liệu: ${docLink("hsk", "h-pinyin", "Pinyin")} · ${docLink("hsk", "h-grammar", "Ngữ pháp")} · ${docLink("hsk", "h-method", "Cách học")}</p></div></div>`;
     }
 
     el.innerHTML = `
@@ -359,7 +359,7 @@
         <header><span>Ngày ${i + 1}</span><span class="muted">${fmtShort(x)}</span></header>
         ${items.map((t) => `<label><input type="checkbox" data-t30="${t.id}" ${state.done30[t.id] ? "checked" : ""}>
           <span class="dot ${t.subject}"></span><span class="${state.done30[t.id] ? "done" : ""}">${esc(t.text)}
-          ${t.moved ? `<span class="moved">· từ ngày ${t.day}</span>` : ""}</span></label>`).join("")}
+          ${t.moved ? `<span class="moved">· từ ngày ${t.day}</span>` : ""} ${dayDocLinks(t)}</span></label>`).join("")}
       </div>`;
     }).join("");
 
@@ -526,6 +526,123 @@
     };
   }
 
+
+  // ---------- Tài liệu ----------
+  const CT = window.CONTENT;
+  const DOC_SUBJECTS = ["graph", "oop", "ielts", "hsk"];
+  const SKILL_DOC = { Listening: "i-listening", Reading: "i-reading", Writing: "i-writing2", Speaking: "i-speaking",
+    Vocab: "i-vocab", Grammar: "i-grammar", Mock: "i-format" };
+  const docs = { subject: "graph", topic: CT.graph.topics[0].id, query: "" };
+
+  function findTopic(subject, id) {
+    return CT[subject].topics.find((t) => t.id === id);
+  }
+
+  function docLink(subject, id, label) {
+    const t = id && findTopic(subject, id);
+    if (!t) return "";
+    return `<a href="#" class="doclink" data-doc="${subject}|${id}" title="${esc(t.title)}">${esc(label || "Tài liệu")}</a>`;
+  }
+
+  function dayDocLinks(t) {
+    if (t.rest) return "";
+    const v = CT.dayTopics[t.subject][t.day];
+    if (!v) return "";
+    const ids = [].concat(v);
+    return ids.map((id, i) => docLink(t.subject, id, ids.length > 1 ? `Tài liệu ${i + 1}` : "Tài liệu")).join(" ");
+  }
+
+  function openDoc(subject, id) {
+    docs.subject = subject;
+    docs.topic = id;
+    docs.query = "";
+    renderDocs();
+    showTab("docs");
+    window.scrollTo(0, 0);
+  }
+
+  function exProgress(subject) {
+    let done = 0, total = 0;
+    CT[subject].topics.forEach((t) => t.exercises.forEach((_, i) => {
+      total++;
+      if (state.exDone[`${t.id}#${i}`]) done++;
+    }));
+    return { done, total };
+  }
+
+  function plainText(html) {
+    return html.replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/g, " ").toLowerCase();
+  }
+
+  function renderDocs() {
+    const el = document.getElementById("tab-docs");
+    const subj = CT[docs.subject];
+    const q = docs.query.trim().toLowerCase();
+    const topics = subj.topics.filter((t) => !q || (t.title + plainText(t.theory) + (t.code || "") +
+      t.exercises.map((e) => plainText(e.q)).join(" ")).toLowerCase().includes(q));
+    const topic = findTopic(docs.subject, docs.topic) || subj.topics[0];
+    const p = exProgress(docs.subject);
+    const done = (t) => t.exercises.filter((_, i) => state.exDone[`${t.id}#${i}`]).length;
+
+    el.innerHTML = `
+      <h2>Tài liệu</h2>
+      <div class="doc-subjects">${DOC_SUBJECTS.map((k) => {
+        const pr = exProgress(k);
+        return `<button class="chip ${k === docs.subject ? "active" : ""}" data-subj="${k}">${esc(CT[k].name)} <span class="muted small">${pr.done}/${pr.total}</span></button>`;
+      }).join("")}</div>
+      <div class="docs">
+        <aside class="card toc">
+          <input type="search" id="docSearch" placeholder="Tìm trong ${esc(subj.name)}…" value="${esc(docs.query)}">
+          <div class="small muted" style="margin:8px 0">Bài tập đã làm: ${p.done}/${p.total}</div>
+          <ol>${topics.map((t) => `<li><a href="#" data-doc="${docs.subject}|${t.id}" class="${t.id === topic.id ? "active" : ""}">${esc(t.title)}</a>
+            <span class="small muted">${done(t)}/${t.exercises.length}</span></li>`).join("") || `<li class="muted">Không tìm thấy.</li>`}</ol>
+          <h3 style="margin-top:14px">Link học</h3>
+          <ul class="links">${CT.links[docs.subject].map((l) => `<li><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title)}</a><div class="small muted">${esc(l.note)}</div></li>`).join("")}</ul>
+        </aside>
+        <article class="card doc">
+          <h2>${esc(topic.title)}</h2>
+          <div class="theory">${topic.theory}</div>
+          ${topic.code ? `<h3>Code mẫu</h3><pre><code>${esc(topic.code)}</code></pre>` : ""}
+          <h3>Bài tập</h3>
+          <ol class="exercises">${topic.exercises.map((e, i) => {
+            const key = `${topic.id}#${i}`;
+            return `<li><div class="q">${e.q}</div>
+              <details><summary>Xem lời giải</summary><div class="a">${e.a}</div></details>
+              <label class="small"><input type="checkbox" data-ex="${key}" ${state.exDone[key] ? "checked" : ""}> Đã làm</label></li>`;
+          }).join("")}</ol>
+        </article>
+      </div>`;
+
+    el.querySelectorAll("[data-subj]").forEach((b) => (b.onclick = () => {
+      docs.subject = b.dataset.subj;
+      docs.topic = CT[docs.subject].topics[0].id;
+      docs.query = "";
+      renderDocs();
+    }));
+    const search = el.querySelector("#docSearch");
+    search.oninput = () => {
+      docs.query = search.value;
+      renderDocs();
+      const s2 = document.getElementById("docSearch");
+      s2.focus();
+      s2.setSelectionRange(s2.value.length, s2.value.length);
+    };
+    el.querySelectorAll("[data-ex]").forEach((cb) => (cb.onchange = () => {
+      if (cb.checked) state.exDone[cb.dataset.ex] = true;
+      else delete state.exDone[cb.dataset.ex];
+      save();
+      renderDocs();
+    }));
+  }
+
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest("[data-doc]");
+    if (!a) return;
+    e.preventDefault();
+    const [subject, id] = a.dataset.doc.split("|");
+    openDoc(subject, id);
+  });
+
   // ---------- Nhật ký ----------
   function renderLog() {
     const el = document.getElementById("tab-log");
@@ -653,6 +770,7 @@
     renderExam30();
     renderIelts();
     renderHsk();
+    renderDocs();
     renderLog();
     renderSettings();
   }

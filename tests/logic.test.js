@@ -84,3 +84,19 @@ test("tổng tuần và chuỗi ngày học", () => {
   assert.strictEqual(L.streak(logs, "2026-11-19"), 3);
   assert.strictEqual(L.streak(logs, "2026-11-21"), 0);
 });
+
+test("tài liệu: mọi ngày trong lịch 30 ngày trỏ tới chủ đề có thật", () => {
+  const C = Object.assign({}, require("../js/content-cs.js"), require("../js/content-lang.js"));
+  for (const s of ["graph", "oop"]) {
+    const ids = new Set(C[s].topics.map((t) => t.id));
+    for (let d = 1; d <= 29; d++) {
+      const v = C.dayTopics[s][d];
+      assert.ok(v, `${s} ngày ${d} chưa gắn tài liệu`);
+      for (const id of [].concat(v)) assert.ok(ids.has(id), `${s} ngày ${d}: không có ${id}`);
+    }
+  }
+  for (const s of ["graph", "oop", "ielts", "hsk"]) {
+    assert.ok(C[s].topics.every((t) => t.exercises.length > 0), `${s} có chủ đề không có bài tập`);
+    assert.ok(C.links[s].every((l) => l.url.startsWith("https://")));
+  }
+});
