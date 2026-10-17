@@ -8,35 +8,54 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <header class="top">
-    <div class="brand">
-      <h1>Lộ trình học</h1>
-      <p class="sub">Đồ thị · OOP · IELTS · HSK, đến khi tốt nghiệp</p>
-    </div>
-    <nav class="tabs" role="tablist">
-      <button data-tab="today" class="active">Hôm nay</button>
-      <button data-tab="exam30">30 ngày</button>
-      <button data-tab="practice">Luyện tập</button>
-      <button data-tab="ielts">IELTS</button>
-      <button data-tab="hsk">HSK</button>
-      <button data-tab="library">Tài liệu</button>
-      <button data-tab="shelf">Thư viện</button>
-      <button data-tab="log">Nhật ký</button>
-      <button data-tab="settings">Cài đặt</button>
-    </nav>
-  </header>
+  <div class="app">
+    <aside class="side">
+      <div class="brand"><span class="logo">LT</span><div><b>Lộ trình học</b><small>Đồ thị · OOP · IELTS · HSK</small></div></div>
+      <nav class="nav" aria-label="Mục chính">
+      <button type="button" data-group="today"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Hôm nay</span></button>
+      <button type="button" data-group="practice"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5a2 2 0 0 1 2-2h12v14H6a2 2 0 0 0-2 2zm0 0a2 2 0 0 0 2 2h12"/><path d="M9 8l2 2 4-4"/></svg><span>Luyện tập</span></button>
+      <button type="button" data-group="plan"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg><span>Lộ trình</span></button>
+      <button type="button" data-group="docs"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/></svg><span>Tài liệu</span></button>
+      <button type="button" data-group="log"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Nhật ký</span></button>
+      <button type="button" data-group="settings"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg><span>Cài đặt</span></button>
+      </nav>
+      <p class="side-foot" id="sideFoot"></p>
+    </aside>
 
-  <main>
-    <section id="tab-today" class="tab active"></section>
-    <section id="tab-exam30" class="tab"></section>
-    <section id="tab-practice" class="tab"></section>
-    <section id="tab-ielts" class="tab"></section>
-    <section id="tab-hsk" class="tab"></section>
-    <section id="tab-library" class="tab"></section>
-    <section id="tab-shelf" class="tab"></section>
-    <section id="tab-log" class="tab"></section>
-    <section id="tab-settings" class="tab"></section>
-  </main>
+    <div class="content">
+      <header class="top">
+        <div class="brand"><span class="logo">LT</span><b>Lộ trình học</b></div>
+        <button type="button" class="iconbtn" data-group="settings" aria-label="Cài đặt"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></button>
+      </header>
+      <nav class="subtabs" id="subtabs" aria-label="Mục con"></nav>
+      <main>
+        <section id="tab-today" class="tab active"></section>
+        <section id="tab-practice" class="tab"></section>
+        <section id="tab-exam30" class="tab"></section>
+        <section id="tab-ielts" class="tab"></section>
+        <section id="tab-hsk" class="tab"></section>
+        <section id="tab-library" class="tab"></section>
+        <section id="tab-shelf" class="tab"></section>
+        <section id="tab-log" class="tab"></section>
+        <section id="tab-settings" class="tab"></section>
+      </main>
+    </div>
+  </div>
+
+  <nav class="bottom-nav" aria-label="Mục chính">
+    <button type="button" data-group="today"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Hôm nay</span></button>
+    <button type="button" data-group="practice"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5a2 2 0 0 1 2-2h12v14H6a2 2 0 0 0-2 2zm0 0a2 2 0 0 0 2 2h12"/><path d="M9 8l2 2 4-4"/></svg><span>Luyện tập</span></button>
+    <button type="button" data-group="plan"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg><span>Lộ trình</span></button>
+    <button type="button" data-group="docs"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/></svg><span>Tài liệu</span></button>
+    <button type="button" data-group="log"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Nhật ký</span></button>
+  </nav>
+
+  <dialog id="viewer" aria-label="Xem tài liệu">
+    <div class="viewer-head"><b id="viewerTitle"></b>
+      <a id="viewerOpen" target="_blank" rel="noopener">Mở tab mới</a>
+      <button type="button" class="btn ghost" id="viewerClose">Đóng</button></div>
+    <iframe id="viewerFrame" title="Tài liệu"></iframe>
+  </dialog>
 
   <div id="toast" class="toast" hidden></div>
 
@@ -49,7 +68,7 @@
   <script src="js/quiz.js"></script>
   <script src="js/ielts.js"></script>
   <script src="js/hskdeck.js"></script>
-  <!-- Danh sách PDF trên máy bạn, tạo bằng npm run materials. Không có file này thì tab Thư viện chỉ hiện hướng dẫn. -->
+  <!-- Danh sách PDF trên máy bạn, tạo bằng npm run materials. Không có file này thì mục Sách và đề chỉ hiện hướng dẫn. -->
   <script src="materials/library-data.js"></script>
   <script src="js/app.js"></script>
 </body>

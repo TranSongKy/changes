@@ -15,9 +15,10 @@ Website chạy trên máy (local) để theo dõi và tối ưu lộ trình họ
 - **Luyện HSK**: thẻ từ lặp lại ngắt quãng với 305 từ cơ bản HSK 1–2 và từ bạn tự thêm (dán được từ Excel/Anki), đọc thành tiếng bằng giọng tiếng Trung của máy, luyện nghe chọn thanh điệu. Số từ mới mỗi ngày tự lấy theo lộ trình HSK.
 - **IELTS 4.5 → 7.0+**: nhập điểm đề thử, xem band theo thời gian so với lộ trình, ước tính số giờ còn cần, số giờ mỗi tuần để kịp ngày thi, và gợi ý chia giờ dồn vào kỹ năng yếu nhất.
 - **HSK → HSK 4**: nhập số từ đã thuộc, xem cần học bao nhiêu từ mới mỗi ngày để kịp mốc giai đoạn và ngày thi. Mặc định theo chuẩn HSK 3.0 (HSK 4 khoảng 3.245 từ), đổi về HSK 2.0 trong Cài đặt.
-- **Hôm nay**: việc cần làm trong ngày theo giai đoạn và thứ trong tuần, giờ đã học trong tuần, chuỗi ngày học, bấm giờ, mốc sắp tới.
-- **Tài liệu**: lý thuyết tóm tắt, bài tập có đáp án (bấm để hiện) và link nguồn học cho từng chủ đề Đồ thị, OOP, IELTS, HSK. Lọc theo môn, tìm kiếm không cần gõ dấu, đánh dấu bài đã làm. Mỗi việc ở tab Hôm nay và 30 ngày có nút **Tài liệu** mở thẳng chủ đề của ngày đó.
-- **Thư viện**: sách và đề PDF của bạn (Cambridge IELTS, đề mẫu Reading/Writing, giáo trình và từ vựng HSK) mở thẳng trên máy hoặc trên Drive. Đề Cambridge được xếp mỗi thứ Bảy trước ngày thi IELTS, có nút nhập điểm từng đề; các buổi Reading/Writing/HSK ở tab Hôm nay có nút mở đúng file của buổi đó.
+- **Hôm nay**: vòng tiến độ số phút đã học so với lịch, số ngày tới các mốc thi, ô bắt đầu nhanh (ôn câu sai, thẻ từ HSK, đề Cambridge kế tiếp, câu hỏi của ngày, viết IELTS), rồi việc cần làm trong ngày, giờ đã học trong tuần, bấm giờ.
+- **Bố cục**: máy tính có thanh bên với 6 mục (Hôm nay, Luyện tập, Lộ trình, Tài liệu, Nhật ký, Cài đặt); điện thoại có thanh điều hướng ở cuối màn hình. Lộ trình gồm 30 ngày ôn thi, IELTS, HSK; Tài liệu gồm Lý thuyết và bài tập, Sách và đề. PDF trên máy mở trong khung xem ngay trong trang.
+- **Tài liệu > Lý thuyết và bài tập**: lý thuyết tóm tắt, bài tập có đáp án (bấm để hiện) và link nguồn học cho từng chủ đề Đồ thị, OOP, IELTS, HSK. Lọc theo môn, tìm kiếm không cần gõ dấu, đánh dấu bài đã làm. Mỗi việc ở tab Hôm nay và 30 ngày có nút **Tài liệu** mở thẳng chủ đề của ngày đó.
+- **Tài liệu > Sách và đề**: sách và đề PDF của bạn (Cambridge IELTS, đề mẫu Reading/Writing, giáo trình và từ vựng HSK) mở thẳng trên máy hoặc trên Drive. Đề Cambridge được xếp mỗi thứ Bảy trước ngày thi IELTS, có nút nhập điểm từng đề; các buổi Reading/Writing/HSK ở tab Hôm nay có nút mở đúng file của buổi đó.
 - **Nhật ký**: biểu đồ giờ học theo tuần, ghi thêm buổi học thủ công.
 
 ## Chạy
@@ -39,7 +40,7 @@ Sách và đề có bản quyền nên **không** nằm trong repo. Thư mục `
 
 1. Chép PDF vào `materials/`, chia thư mục con tùy ý, ví dụ `materials/ielts/cambridge/Cambridge 7.pdf`, `materials/hsk/vocab/HSK 1 Words.pdf`.
 2. Không bắt buộc: đặt danh sách file Google Drive ở `materials/inventory.json` (mảng `{ name, path, id, size }`) để có thêm nút mở trên Drive.
-3. Chạy `npm run materials`. Lệnh này tạo `materials/library-data.js`; tải lại trang là thấy tab Thư viện.
+3. Chạy `npm run materials`. Lệnh này tạo `materials/library-data.js`; tải lại trang là thấy mục Sách và đề.
 
 Quy tắc nhận diện tên file nằm trong `js/materials.js`; file nào không nhận ra sẽ vào mục "Tài liệu khác".
 
