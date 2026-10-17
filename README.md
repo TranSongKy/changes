@@ -6,6 +6,7 @@ Website chạy trên máy (local) để theo dõi và tối ưu lộ trình họ
 - **IELTS 4.5 → 7.0+**: nhập điểm đề thử, xem band theo thời gian so với lộ trình, ước tính số giờ còn cần, số giờ mỗi tuần để kịp ngày thi, và gợi ý chia giờ dồn vào kỹ năng yếu nhất.
 - **HSK → HSK 4**: nhập số từ đã thuộc, xem cần học bao nhiêu từ mới mỗi ngày để kịp mốc giai đoạn và ngày thi.
 - **Hôm nay**: việc cần làm trong ngày theo giai đoạn và thứ trong tuần, giờ đã học trong tuần, chuỗi ngày học, bấm giờ, mốc sắp tới.
+- **Tài liệu**: lý thuyết tóm tắt, bài tập có đáp án (bấm để hiện) và link nguồn học cho từng chủ đề Đồ thị, OOP, IELTS, HSK. Lọc theo môn, tìm kiếm không cần gõ dấu, đánh dấu bài đã làm. Mỗi việc ở tab Hôm nay và 30 ngày có nút **Tài liệu** mở thẳng chủ đề của ngày đó.
 - **Nhật ký**: biểu đồ giờ học theo tuần, ghi thêm buổi học thủ công.
 
 ## Chạy
@@ -25,6 +26,7 @@ Dữ liệu được lưu trong trình duyệt (localStorage). Vào **Cài đặ
 
 - Ngày thi, ngày tốt nghiệp, band mục tiêu, giờ học mỗi tuần: tab **Cài đặt**.
 - Nội dung từng ngày, buổi học mẫu IELTS/HSK, số từ mỗi cấp HSK: sửa `js/data.js`.
+- Lý thuyết, bài tập, link tài liệu: sửa `js/library.js`. Trường `days` của mỗi chủ đề Đồ thị/OOP là các ngày trong lịch 30 ngày dùng chủ đề đó.
 - Ô **Xem ngày** ở tab Hôm nay cho phép xem trước lịch của một ngày bất kỳ.
 
 ## Kiểm thử
@@ -33,4 +35,4 @@ Dữ liệu được lưu trong trình duyệt (localStorage). Vào **Cài đặ
 npm test
 ```
 
-Kiểm thử phần tính toán trong `js/logic.js` (dời lịch, làm tròn band IELTS, dự báo, tổng giờ theo tuần).
+Kiểm thử phần tính toán trong `js/logic.js` (dời lịch, làm tròn band IELTS, dự báo, tổng giờ theo tuần) và dữ liệu `js/library.js` (ngày nào cũng có tài liệu, bài tập nào cũng có đáp án).
