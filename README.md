@@ -3,6 +3,11 @@
 Website chạy trên máy (local) để theo dõi và tối ưu lộ trình học từ năm 3 đến khi tốt nghiệp:
 
 - **30 ngày ôn Lý thuyết đồ thị và OOP** (18/10 – 16/11/2026): lịch từng ngày, đánh dấu việc đã xong. Nếu bị trễ, các việc chưa xong tự được dời đều vào những ngày còn lại trước ngày thi (ngày nghỉ cuối được giữ nguyên).
+- **Luyện tập Đồ thị + OOP**:
+  - Mô phỏng BFS, DFS, Dijkstra, Kruskal, Prim, Floyd-Warshall, sắp xếp tô pô chạy từng bước trên hình đồ thị, kèm hàng đợi/ngăn xếp, bảng d và trước, bảng chạy tay Dijkstra, ma trận Floyd. Dùng đồ thị ngẫu nhiên hoặc tự nhập đồ thị trong đề.
+  - Luyện chạy tay: web sinh đề mới, bạn điền kết quả, web chấm từng ô và cho xem lại từng bước.
+  - Câu hỏi chấm tự động (trắc nghiệm, điền số, đoán output của code C++/Java) theo từng chủ đề.
+  - Ôn lại: câu sai, đề chạy tay chưa đúng hết và bài tập trong tab Tài liệu bạn đánh dấu "làm sai" quay lại sau 1, 2, 4, 7, 15, 30 ngày.
 - **IELTS 4.5 → 7.0+**: nhập điểm đề thử, xem band theo thời gian so với lộ trình, ước tính số giờ còn cần, số giờ mỗi tuần để kịp ngày thi, và gợi ý chia giờ dồn vào kỹ năng yếu nhất.
 - **HSK → HSK 4**: nhập số từ đã thuộc, xem cần học bao nhiêu từ mới mỗi ngày để kịp mốc giai đoạn và ngày thi. Mặc định theo chuẩn HSK 3.0 (HSK 4 khoảng 3.245 từ), đổi về HSK 2.0 trong Cài đặt.
 - **Hôm nay**: việc cần làm trong ngày theo giai đoạn và thứ trong tuần, giờ đã học trong tuần, chuỗi ngày học, bấm giờ, mốc sắp tới.
@@ -46,4 +51,4 @@ Quy tắc nhận diện tên file nằm trong `js/materials.js`; file nào khôn
 npm test
 ```
 
-Kiểm thử phần tính toán trong `js/logic.js` (dời lịch, làm tròn band IELTS, dự báo, tổng giờ theo tuần) , dữ liệu `js/library.js` (ngày nào cũng có tài liệu, bài tập nào cũng có đáp án) và phần phân loại, lịch đề Cambridge trong `js/materials.js`.
+Kiểm thử thuật toán đồ thị trong `js/graphalgo.js` (so Floyd với Dijkstra, Kruskal với Prim trên đồ thị ngẫu nhiên), phần chấm điểm và lịch ôn trong `js/practice.js`, bộ câu hỏi `js/quiz.js`, phần tính toán trong `js/logic.js` (dời lịch, làm tròn band IELTS, dự báo, tổng giờ theo tuần) , dữ liệu `js/library.js` (ngày nào cũng có tài liệu, bài tập nào cũng có đáp án) và phần phân loại, lịch đề Cambridge trong `js/materials.js`.

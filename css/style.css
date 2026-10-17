@@ -285,3 +285,49 @@ details.ans > div { background: var(--good-soft); border-radius: 8px; padding: 8
 a.doclink { display: inline-block; text-decoration: none; }
 #tab-shelf ul.checks .mins a { margin-left: 2px; }
 #tab-shelf td { vertical-align: top; }
+
+/* ---------- Luyện tập ---------- */
+.sim { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+.sim > .card { margin-bottom: 0; }
+@media (max-width: 820px) { .sim { grid-template-columns: 1fr; } }
+#practiceBody > .sim { margin-bottom: 14px; }
+.gsvg { width: 100%; max-width: 440px; height: auto; display: block; margin: 0 auto; }
+.gsvg .edge { stroke: var(--muted); stroke-width: 1.6; opacity: .65; }
+.gsvg .edge.e-tree { stroke: var(--good); stroke-width: 3.5; opacity: 1; }
+.gsvg .edge.e-hi { stroke: var(--warn); stroke-width: 4; opacity: 1; }
+.gsvg .edge.e-bad { stroke: var(--bad); stroke-width: 3; stroke-dasharray: 5 4; opacity: 1; }
+.gsvg text.w { fill: var(--text); font-size: 12px; font-weight: 600; paint-order: stroke; stroke: var(--card); stroke-width: 4px; }
+.gsvg text.w.e-hi { fill: var(--warn); }
+.gsvg .node circle { fill: var(--card); stroke: var(--text); stroke-width: 1.5; }
+.gsvg .node text { fill: var(--text); font-size: 14px; font-weight: 600; }
+.gsvg .node.v-seen circle { fill: var(--accent-soft); stroke: var(--accent); }
+.gsvg .node.v-cur circle { fill: var(--accent); stroke: var(--accent); }
+.gsvg .node.v-cur text { fill: #fff; }
+.gsvg .node text.dl { fill: var(--warn); font-size: 11px; font-weight: 600; }
+.sim-ctrl { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.sim-msg { background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; margin: 0 0 10px; min-height: 3em; }
+.scroll { overflow-x: auto; }
+table.mtx { width: auto; font-size: 13px; margin: 6px 0; }
+table.mtx th, table.mtx td { text-align: center; padding: 4px 8px; border: 1px solid var(--line); }
+table.mtx td.chg { background: var(--warn-soft); font-weight: 600; }
+table.mtx .kcol { background: var(--accent-soft); }
+table.mtx td.ok { color: var(--good); }
+table.mtx td.bad { color: var(--bad); }
+input.cell { width: 52px; text-align: center; padding: 4px; }
+label.field input.cell { width: auto; text-align: left; }
+input.cell.ok { border-color: var(--good); background: var(--good-soft); }
+input.cell.bad { border-color: var(--bad); background: var(--warn-soft); }
+.ans { color: var(--good); display: block; font-weight: 600; }
+form.quiz .q { margin: 6px 0 10px; }
+form.quiz pre, div.quiz pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow-x: auto; font-size: 13px; margin: 0 0 8px; }
+.choices { display: flex; flex-direction: column; gap: 6px; }
+.choice { display: flex; gap: 8px; align-items: flex-start; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.choice input { margin-top: 4px; accent-color: var(--accent); }
+.choice.ok { border-color: var(--good); background: var(--good-soft); }
+.choice.bad { border-color: var(--bad); }
+form.quiz input.wide { width: 100%; max-width: 420px; }
+form.quiz textarea.out { width: 100%; font-family: ui-monospace, Consolas, monospace; }
+.ok { color: var(--good); }
+.bad-t { color: var(--bad); }
+.explain { background: var(--bg); border-radius: 8px; padding: 8px 12px; margin-top: 10px; font-size: 14px; }
+.explain p { margin: 4px 0; }

@@ -17,7 +17,7 @@
 
   // ---------- trạng thái ----------
   function blank() {
-    return { settings: { ...P.defaults, viewDate: "" }, done30: {}, daily: {}, logs: [], mocks: [], hskWords: [], exDone: {}, matDone: {} };
+    return { settings: { ...P.defaults, viewDate: "" }, done30: {}, daily: {}, logs: [], mocks: [], hskWords: [], exDone: {}, matDone: {}, quizDone: {}, srs: {}, handRuns: [] };
   }
 
   function load() {
@@ -252,7 +252,7 @@
         items.map((t) => `<li><input type="checkbox" data-t30="${t.id}" ${state.done30[t.id] ? "checked" : ""}>
           <span class="${state.done30[t.id] ? "done" : ""}"><span class="pill ${t.subject}">${SUBJECTS[t.subject].name}</span>
           ${esc(t.text)} ${t.moved ? `<span class="moved small">(dời từ ngày ${t.day})</span>` : ""}
-          ${t.rest ? "" : topicsForDay(t.subject, t.day).map((x) => docLink(x)).join("")}</span>
+          ${t.rest ? "" : topicsForDay(t.subject, t.day).map((x) => docLink(x)).join("") + practiceLinks(t.subject, t.day)}</span>
           <span class="mins">${t.rest ? "" : SUBJECTS[t.subject].minutes + "'"}</span></li>`).join("") +
         dailyItem(d, "vocab", "ielts", 20, "IELTS: 20 phút từ vựng (giữ nhịp)") +
         `</ul></div>`;
@@ -289,6 +289,7 @@
         <div class="card"><div class="muted small">Đồ thị + OOP tuần này</div><div class="stat">${hrs(tot("graph") + tot("oop"))} <small>giờ</small></div></div>
       </div>
       
+      ${dueList().length ? `<div class="alert warn">Hôm nay có ${dueList().length} mục cần ôn lại (câu làm sai từ các lần trước). <button type="button" class="doclink" data-practice="review">Ôn ngay</button></div>` : ""}
       ${plan}
       <div class="grid">
         <div class="card"><h3>Bấm giờ</h3><div class="timer">
@@ -619,7 +620,8 @@
         ${t.code ? `<pre><code>${esc(t.code)}</code></pre>` : ""}
         <h4>Bài tập</h4><ol class="ex">${t.exercises.map((e, i) => `<li>
           <label><input type="checkbox" data-ex="${exKey(t, i)}" ${state.exDone[exKey(t, i)] ? "checked" : ""}><span>${e.q}</span></label>
-          <details class="ans"><summary>Xem đáp án</summary><div>${e.a}</div></details></li>`).join("")}</ol>
+          <details class="ans"><summary>Xem đáp án</summary><div>${e.a}</div>
+            <p class="small" style="margin:6px 0 0">${state.srs["ex:" + exKey(t, i)] && state.srs["ex:" + exKey(t, i)].due ? '<span class="muted">Đang trong sổ ôn lại.</span> ' : ""}<button type="button" class="doclink" data-exgrade="${exKey(t, i)}|1">Mình làm đúng</button><button type="button" class="doclink" data-exgrade="${exKey(t, i)}|0">Làm sai, ôn lại sau</button></p></details></li>`).join("")}</ol>
         ${t.resources && t.resources.length ? `<h4>Đọc thêm</h4><ul class="res">${t.resources.map(resLink).join("")}</ul>` : ""}
       </div></details>`;
   }
@@ -802,6 +804,466 @@
     }));
   }
 
+  // ---------- Luyện tập: mô phỏng, chạy tay, câu hỏi, ôn lại ----------
+  const GA = window.GraphAlgo;
+  const PR = window.Practice;
+  const QZ = window.QUIZ || [];
+  const PVIEWS = [["sim", "Mô phỏng thuật toán"], ["hand", "Luyện chạy tay"], ["quiz", "Câu hỏi"], ["review", "Ôn lại"]];
+  const pr = { view: "sim", algo: "bfs", graph: null, src: 1, step: 0, timer: null,
+    hAlgo: "dijkstra", hGraph: null, hSeed: 0, hResult: null, qSubject: "graph", qTopic: "", qOpen: {} };
+
+  const dueList = () => PR.due(state.srs, realToday());
+  const quizTopics = (subject) => LIB.topics.filter((t) => t.subject === subject && QZ.some((q) => q.topic === t.id));
+  const algoOfTopic = (id) => Object.keys(GA.ALGOS).filter((k) => GA.ALGOS[k].topic === id);
+
+  function graphFor(algo, seed) {
+    const need = GA.ALGOS[algo].needs;
+    if (algo === "topo") return GA.randomGraph({ n: 7, m: 9, dag: true, seed });
+    if (algo === "floyd") return GA.randomGraph({ n: 4, m: 6, directed: true, seed });
+    if (algo === "kruskal" || algo === "prim") return GA.randomGraph({ n: 6, m: 9, distinct: true, maxW: 15, seed });
+    if (need.weighted) return GA.randomGraph({ n: 6, m: 9, seed });
+    return GA.randomGraph({ n: 7, m: 9, seed });
+  }
+  const weighted = (algo) => !!GA.ALGOS[algo].needs.weighted;
+  function fits(algo, g) {
+    const need = GA.ALGOS[algo].needs;
+    return g && !(need.directed && !g.directed) && !(need.undirected && g.directed);
+  }
+
+  // Vẽ đồ thị: đỉnh xếp trên vòng tròn, tô màu theo bước đang xem.
+  function graphSvg(g, st = {}, opts = {}) {
+    const W = 380, H = 320, R = 125, cx = W / 2, cy = H / 2 + 4, r = 17;
+    const pos = (i) => {
+      const a = -Math.PI / 2 + (2 * Math.PI * (i - 1)) / g.n;
+      return [cx + R * Math.cos(a), cy + R * Math.sin(a)];
+    };
+    const same = (e, u, v) => e && ((e[0] === u && e[1] === v) || (!g.directed && e[0] === v && e[1] === u));
+    const inTree = (u, v) => (st.tree || []).some((e) => same(e, u, v));
+    const visited = new Set(st.visited || []);
+    const lines = g.edges.map(([u, v, w]) => {
+      const [x1, y1] = pos(u), [x2, y2] = pos(v);
+      const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+      const ax = x1 + (dx / len) * r, ay = y1 + (dy / len) * r, bx = x2 - (dx / len) * (r + (g.directed ? 4 : 0)), by = y2 - (dy / len) * (r + (g.directed ? 4 : 0));
+      const hi = same(st.hiEdge, u, v), tree = inTree(u, v);
+      const cls = hi ? (st.rejected ? "e-bad" : "e-hi") : tree ? "e-tree" : "";
+      // Nhãn trọng số đặt lệch khỏi trung điểm để không chồng lên nhau ở chỗ các cạnh cắt nhau giữa hình
+      const t = g.directed ? 0.5 : 0.4;
+      const mx = x1 + dx * t - (dy / len) * 9, my = y1 + dy * t + (dx / len) * 9;
+      return `<line class="edge ${cls}" x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" ${g.directed ? 'marker-end="url(#arrow)"' : ""}/>` +
+        (opts.weights ? `<text class="w ${cls}" x="${mx}" y="${my + 4}" text-anchor="middle">${w}</text>` : "");
+    }).join("");
+    const nodes = Array.from({ length: g.n }, (_, k) => k + 1).map((v) => {
+      const [x, y] = pos(v);
+      const cls = v === st.cur ? "v-cur" : visited.has(v) ? "v-seen" : "";
+      const lab = st.dist && opts.dist ? `<text class="dl" x="${x}" y="${y - r - 5}" text-anchor="middle">${GA.fmtD(st.dist[v])}</text>` : "";
+      return `<g class="node ${cls}"><circle cx="${x}" cy="${y}" r="${r}"/><text x="${x}" y="${y + 5}" text-anchor="middle">${v}</text>${lab}</g>`;
+    }).join("");
+    return `<svg class="gsvg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Đồ thị ${g.n} đỉnh">
+      <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+      ${lines}${nodes}</svg>`;
+  }
+
+  function matrixTable(M, n, st = {}) {
+    const ch = new Set((st.changed || []).map(([i, j]) => `${i},${j}`));
+    let h = `<table class="mtx"><tr><th></th>${Array.from({ length: n }, (_, j) => `<th class="${st.k === j + 1 ? "kcol" : ""}">${j + 1}</th>`).join("")}</tr>`;
+    for (let i = 1; i <= n; i++) {
+      h += `<tr><th class="${st.k === i ? "kcol" : ""}">${i}</th>`;
+      for (let j = 1; j <= n; j++) h += `<td class="${ch.has(`${i},${j}`) ? "chg" : ""} ${st.k === i || st.k === j ? "kcol" : ""}">${GA.fmtD(M[i][j])}</td>`;
+      h += "</tr>";
+    }
+    return h + "</table>";
+  }
+
+  function simPanel(run, st, i) {
+    const g = pr.graph, a = pr.algo;
+    let data = "";
+    if (st.frontier) data += `<p class="small"><b>${st.frontier.label}:</b> ${st.frontier.items.length ? st.frontier.items.join(", ") : "(rỗng)"}</p>`;
+    if (st.visited && st.visited.length && a !== "kruskal") data += `<p class="small"><b>${a === "dijkstra" ? "Đã cố định" : a === "prim" ? "Trong cây" : a === "topo" ? "Thứ tự" : "Đã thăm"}:</b> ${st.visited.join(", ")}</p>`;
+    if (st.total !== undefined) data += `<p class="small"><b>Tổng trọng số:</b> ${st.total}</p>`;
+    const vs = Array.from({ length: g.n }, (_, k) => k + 1);
+    if (a === "bfs" || a === "dijkstra" || a === "prim") {
+      data += `<table class="mtx"><tr><th>Đỉnh</th>${vs.map((v) => `<th>${v}</th>`).join("")}</tr>
+        <tr><th>${a === "prim" ? "Cạnh nhẹ nhất" : "d"}</th>${vs.map((v) => `<td>${GA.fmtD(st.dist[v])}</td>`).join("")}</tr>
+        <tr><th>Trước</th>${vs.map((v) => `<td>${st.parent[v] || "–"}</td>`).join("")}</tr></table>`;
+    }
+    if (a === "dfs") data += `<table class="mtx"><tr><th>Đỉnh</th>${vs.map((v) => `<th>${v}</th>`).join("")}</tr><tr><th>Trước</th>${vs.map((v) => `<td>${st.parent[v] || "–"}</td>`).join("")}</tr></table>`;
+    if (a === "topo") data += `<table class="mtx"><tr><th>Đỉnh</th>${vs.map((v) => `<th>${v}</th>`).join("")}</tr><tr><th>Bán bậc vào</th>${vs.map((v) => `<td>${st.visited.includes(v) ? "–" : st.indeg[v]}</td>`).join("")}</tr></table>`;
+    if (a === "dijkstra" && run.rows.length) {
+      const shown = run.rows.slice(0, st.visited.length);
+      data += `<h4>Bảng chạy tay</h4><div class="scroll"><table class="mtx"><tr><th>Bước</th>${vs.map((v) => `<th>${v}</th>`).join("")}</tr>
+        ${shown.map((row, k) => `<tr><th>${k + 1}</th>${vs.map((v) => {
+          const before = shown.slice(0, k).some((x) => x.fixed === v);
+          if (before) return "<td>–</td>";
+          const txt = row.dist[v] === GA.INF ? "∞" : `${row.dist[v]}, ${row.parent[v] || v}`;
+          return `<td class="${row.fixed === v ? "chg" : ""}">${txt}${row.fixed === v ? "*" : ""}</td>`;
+        }).join("")}</tr>`).join("")}</table></div>
+        <p class="small muted">Mỗi ô ghi (d, trước). Dấu * là đỉnh được cố định ở bước đó.</p>`;
+    }
+    if (a === "kruskal") {
+      const upTo = run.steps.slice(0, i + 1);
+      const status = (e) => upTo.find((s) => s.hiEdge && s.hiEdge[0] === e[0] && s.hiEdge[1] === e[1]);
+      data += `<div class="scroll"><table class="mtx"><tr><th>Cạnh</th>${st.edgeList.map((e) => `<th>${e[0]}-${e[1]}</th>`).join("")}</tr>
+        <tr><th>w</th>${st.edgeList.map((e) => `<td>${e[2]}</td>`).join("")}</tr>
+        <tr><th></th>${st.edgeList.map((e) => { const s = status(e); return `<td class="${s ? (s.picked ? "ok" : "bad") : ""}">${s ? (s.picked ? "chọn" : "bỏ") : ""}</td>`; }).join("")}</tr></table></div>`;
+    }
+    if (a === "floyd") data += matrixTable(st.matrix, g.n, st) + `<p class="small muted">Ô tô màu là ô vừa được cập nhật khi cho đi qua đỉnh ${st.k || "–"}.</p>`;
+    return data;
+  }
+
+  function renderSim(el) {
+    if (!fits(pr.algo, pr.graph)) pr.graph = graphFor(pr.algo, Date.now() % 100000);
+    const g = pr.graph, A = GA.ALGOS[pr.algo];
+    if (pr.src > g.n) pr.src = 1;
+    const run = A.run(g, pr.src);
+    pr.step = Math.min(pr.step, run.steps.length - 1);
+    const st = run.steps[pr.step];
+    el.innerHTML = `
+      <div class="card"><form class="row" id="simForm">
+        <label>Thuật toán<select id="simAlgo">${Object.entries(GA.ALGOS).map(([k, v]) => `<option value="${k}" ${pr.algo === k ? "selected" : ""}>${v.name}</option>`).join("")}</select></label>
+        ${A.needs.source ? `<label>Đỉnh bắt đầu<select id="simSrc">${Array.from({ length: g.n }, (_, k) => `<option ${pr.src === k + 1 ? "selected" : ""}>${k + 1}</option>`).join("")}</select></label>` : ""}
+        <button type="button" class="btn ghost" id="simRandom">Đồ thị ngẫu nhiên</button>
+        ${docLink(topicById(A.topic), "Lý thuyết")}
+      </form>
+      <details class="small" style="margin-top:8px"><summary>Tự nhập đồ thị (ví dụ đồ thị trong đề)</summary>
+        <p class="muted">Mỗi dòng một cạnh: <code>đỉnh_đầu đỉnh_cuối trọng_số</code>. Đỉnh đánh số từ 1, tối đa 12 đỉnh.</p>
+        <textarea id="simEdges" rows="6" style="width:100%;font-family:ui-monospace,Consolas,monospace">${esc(GA.formatGraph(g))}</textarea>
+        <div class="row" style="display:flex;gap:10px;align-items:center;margin-top:6px"><label><input type="checkbox" id="simDirected" ${g.directed ? "checked" : ""}> Có hướng</label>
+        <button type="button" class="btn" id="simApply">Dùng đồ thị này</button></div></details></div>
+      <div class="sim">
+        <div class="card">${graphSvg(g, st, { weights: weighted(pr.algo), dist: ["bfs", "dijkstra", "prim"].includes(pr.algo) })}
+          <div class="legend"><span><i style="background:var(--accent)"></i>Đang xét</span><span><i style="background:var(--accent-soft);border:1px solid var(--accent)"></i>Đã thăm</span><span><i style="background:var(--good)"></i>Cạnh đã chọn</span><span><i style="background:var(--warn)"></i>Cạnh đang xét</span></div></div>
+        <div class="card">
+          <div class="sim-ctrl">
+            <button type="button" class="btn ghost" data-sim="first" title="Về đầu">⏮</button>
+            <button type="button" class="btn ghost" data-sim="prev">◀ Lùi</button>
+            <button type="button" class="btn" data-sim="next">Tiếp ▶</button>
+            <button type="button" class="btn ghost" data-sim="play">${pr.timer ? "Dừng" : "Tự chạy"}</button>
+            <span class="muted small">Bước ${pr.step + 1}/${run.steps.length}</span>
+          </div>
+          <p class="sim-msg">${esc(st.msg)}</p>
+          ${simPanel(run, st, pr.step)}
+          <p class="small muted">Quy ước: xét đỉnh kề theo thứ tự tăng dần, khi hòa thì chọn đỉnh hoặc cạnh có số nhỏ hơn.</p>
+        </div>
+      </div>`;
+    const rerender = () => renderPracticeBody();
+    el.querySelector("#simAlgo").onchange = (e) => { stopSim(); pr.algo = e.target.value; pr.step = 0; rerender(); };
+    const src = el.querySelector("#simSrc");
+    if (src) src.onchange = (e) => { stopSim(); pr.src = Number(e.target.value); pr.step = 0; rerender(); };
+    el.querySelector("#simRandom").onclick = () => { stopSim(); pr.graph = graphFor(pr.algo, Date.now() % 100000); pr.step = 0; rerender(); };
+    el.querySelector("#simApply").onclick = () => {
+      try {
+        const g2 = GA.parseGraph(el.querySelector("#simEdges").value, el.querySelector("#simDirected").checked);
+        if (!fits(pr.algo, g2)) throw new Error(GA.ALGOS[pr.algo].needs.directed ? "Thuật toán này cần đồ thị có hướng." : "Thuật toán này cần đồ thị vô hướng.");
+        stopSim();
+        pr.graph = g2;
+        pr.step = 0;
+        rerender();
+      } catch (err) {
+        toast(err.message);
+      }
+    };
+    el.querySelectorAll("[data-sim]").forEach((b) => (b.onclick = () => {
+      const k = b.dataset.sim;
+      if (k === "play") {
+        if (pr.timer) stopSim();
+        else pr.timer = setInterval(() => {
+          if (pr.step >= run.steps.length - 1) stopSim();
+          else pr.step++;
+          rerender();
+        }, 900);
+        rerender();
+        return;
+      }
+      stopSim();
+      if (k === "first") pr.step = 0;
+      if (k === "prev") pr.step = Math.max(pr.step - 1, 0);
+      if (k === "next") pr.step = Math.min(pr.step + 1, run.steps.length - 1);
+      rerender();
+    }));
+  }
+  function stopSim() {
+    clearInterval(pr.timer);
+    pr.timer = null;
+  }
+
+  // ---------- Chạy tay ----------
+  const INFS = ["∞", "inf", "oo", "vc", "x", "-"];
+  const readNum = (s) => {
+    const t = String(s).trim().toLowerCase();
+    if (INFS.includes(t)) return GA.INF;
+    return t === "" ? NaN : Number(t.replace(",", "."));
+  };
+  const readList = (s) => String(s).split(/[^0-9]+/).filter(Boolean).map(Number);
+  const readEdges = (s) => String(s).split(/[,;\n]+/).map((x) => readList(x)).filter((x) => x.length === 2).map(([u, v]) => [Math.min(u, v), Math.max(u, v)]);
+
+  // Mỗi ô cần điền: { id, label, check(value) -> bool, answer (để hiện khi xem đáp án) }
+  function handCells(algo, g) {
+    const vs = Array.from({ length: g.n }, (_, k) => k + 1);
+    const r = GA.ALGOS[algo].run(g, 1);
+    const cells = [];
+    const order = (label, ans) => cells.push({ id: "order", label, wide: true, answer: ans.join(", "), check: (v) => readList(v).join(",") === ans.join(",") });
+    if (algo === "bfs" || algo === "dfs" || algo === "topo" || algo === "prim") order(algo === "prim" ? "Thứ tự thêm đỉnh vào cây" : algo === "topo" ? "Thứ tự tô pô" : "Thứ tự thăm", r.order);
+    if (algo === "dijkstra") order("Thứ tự cố định đỉnh", r.order);
+    if (algo === "bfs" || algo === "dijkstra") vs.forEach((v) => cells.push({ id: `d${v}`, group: "d", v, answer: GA.fmtD(r.dist[v]), check: (x) => readNum(x) === r.dist[v] }));
+    if (algo === "bfs" || algo === "dfs" || algo === "dijkstra") vs.filter((v) => v !== 1).forEach((v) => cells.push({ id: `p${v}`, group: "p", v, answer: String(r.parent[v] || "–"), check: (x) => Number(x) === r.parent[v] }));
+    if (algo === "kruskal") {
+      const ans = r.tree.map(([u, v]) => `${u}-${v}`);
+      cells.push({ id: "edges", label: "Các cạnh được chọn, theo thứ tự (ví dụ 1-2, 3-5)", wide: true, answer: ans.join(", "), check: (x) => readEdges(x).map(([u, v]) => `${u}-${v}`).join(",") === ans.join(",") });
+    }
+    if (algo === "kruskal" || algo === "prim") cells.push({ id: "total", label: "Tổng trọng số cây khung", answer: String(r.total), check: (x) => readNum(x) === r.total });
+    if (algo === "floyd") vs.forEach((i) => vs.forEach((j) => { if (i !== j) cells.push({ id: `m${i}_${j}`, group: "m", i, j, answer: GA.fmtD(r.matrix[i][j]), check: (x) => readNum(x) === r.matrix[i][j] }); }));
+    return cells;
+  }
+
+  function newHand() {
+    pr.hSeed = Math.floor(Math.random() * 1e6);
+    pr.hGraph = graphFor(pr.hAlgo, pr.hSeed);
+    pr.hResult = null;
+  }
+
+  function renderHand(el) {
+    if (!pr.hGraph || !fits(pr.hAlgo, pr.hGraph)) newHand();
+    const g = pr.hGraph, a = pr.hAlgo, A = GA.ALGOS[a];
+    const cells = handCells(a, g);
+    const res = pr.hResult;
+    const vs = Array.from({ length: g.n }, (_, k) => k + 1);
+    const inp = (c, w = "") => {
+      const st = res ? (res.ok[c.id] ? "ok" : "bad") : "";
+      return `<input class="cell ${st}" data-cell="${c.id}" value="${esc(res ? res.val[c.id] || "" : "")}" ${w} autocomplete="off">${res && !res.ok[c.id] && res.show ? `<span class="small ans">${esc(c.answer)}</span>` : ""}`;
+    };
+    const byGroup = (gname) => cells.filter((c) => c.group === gname);
+    let form = cells.filter((c) => c.label).map((c) => `<label class="field" style="${c.wide ? "flex:1;min-width:220px" : ""}">${c.label}${inp(c, c.wide ? 'style="width:100%"' : "")}</label>`).join("");
+    if (byGroup("d").length || byGroup("p").length) {
+      form += `<div class="scroll" style="width:100%"><table class="mtx"><tr><th>Đỉnh</th>${vs.map((v) => `<th>${v}</th>`).join("")}</tr>
+        ${byGroup("d").length ? `<tr><th>d</th>${vs.map((v) => `<td>${inp(byGroup("d").find((c) => c.v === v))}</td>`).join("")}</tr>` : ""}
+        ${byGroup("p").length ? `<tr><th>Trước</th>${vs.map((v) => { const c = byGroup("p").find((x) => x.v === v); return `<td>${c ? inp(c) : "–"}</td>`; }).join("")}</tr>` : ""}</table></div>`;
+    }
+    if (byGroup("m").length) {
+      form += `<div class="scroll" style="width:100%"><table class="mtx"><tr><th></th>${vs.map((v) => `<th>${v}</th>`).join("")}</tr>
+        ${vs.map((i) => `<tr><th>${i}</th>${vs.map((j) => (i === j ? "<td>0</td>" : `<td>${inp(byGroup("m").find((c) => c.i === i && c.j === j))}</td>`)).join("")}</tr>`).join("")}</table></div>`;
+    }
+    const hist = state.handRuns.filter((h) => h.algo === a);
+    el.innerHTML = `
+      <div class="card"><form class="row" id="handForm0">
+        <label>Thuật toán<select id="handAlgo">${Object.entries(GA.ALGOS).map(([k, v]) => `<option value="${k}" ${a === k ? "selected" : ""}>${v.name}</option>`).join("")}</select></label>
+        <button type="button" class="btn ghost" id="handNew">Đề mới</button>
+        <span class="muted small">${hist.length ? `Đã làm ${hist.length} đề, đúng hết ${hist.filter((h) => h.score === h.total).length} đề` : "Chưa làm đề nào"}</span>
+      </form></div>
+      <div class="sim">
+        <div class="card"><h3>Đề</h3>
+          <p>${a === "floyd" ? "Tìm ma trận khoảng cách ngắn nhất giữa mọi cặp đỉnh (D⁴). Ghi ∞ nếu không có đường đi." :
+            a === "topo" ? "Sắp xếp tô pô đồ thị có hướng dưới đây bằng thuật toán Kahn (xóa dần đỉnh có bán bậc vào 0)." :
+            a === "kruskal" ? "Tìm cây khung nhỏ nhất bằng Kruskal." :
+            a === "prim" ? "Tìm cây khung nhỏ nhất bằng Prim, bắt đầu từ đỉnh 1." :
+            `Chạy ${A.name} từ đỉnh 1${a === "dijkstra" ? ", tìm d và đỉnh trước của mọi đỉnh" : ""}.`}
+            Xét đỉnh kề theo thứ tự tăng dần, khi hòa thì chọn số nhỏ hơn${a === "dijkstra" ? ", chỉ cập nhật khi đường mới ngắn hơn hẳn" : ""}.</p>
+          ${graphSvg(g, {}, { weights: weighted(a) })}
+          <p class="small muted">Danh sách ${g.directed ? "cung" : "cạnh"}: ${g.edges.map(([u, v, w]) => `${u}${g.directed ? "→" : "-"}${v}${weighted(a) ? ` (${w})` : ""}`).join(", ")}</p></div>
+        <div class="card"><h3>Bài làm</h3>
+          <form id="handForm"><div class="row" style="display:flex;flex-wrap:wrap;gap:10px">${form}</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+              <button class="btn">Chấm</button>
+              ${res ? `<button type="button" class="btn ghost" id="handShow">${res.show ? "Ẩn đáp án" : "Xem đáp án"}</button>
+              <button type="button" class="btn ghost" id="handSteps">Xem từng bước</button>` : ""}
+            </div></form>
+          ${res ? `<div class="alert ${res.score === res.total ? "good" : "warn"}" style="margin-top:12px">Đúng ${res.score}/${res.total} ô.${res.score === res.total ? " Làm thêm đề mới để quen tay." : " Ô đỏ là ô sai. Đề dạng này đã vào sổ ôn lại."}</div>` : ""}
+        </div>
+      </div>`;
+    el.querySelector("#handAlgo").onchange = (e) => { pr.hAlgo = e.target.value; newHand(); renderPracticeBody(); };
+    el.querySelector("#handNew").onclick = () => { newHand(); renderPracticeBody(); };
+    el.querySelector("#handForm").onsubmit = (e) => {
+      e.preventDefault();
+      const val = {}, ok = {};
+      el.querySelectorAll("[data-cell]").forEach((x) => (val[x.dataset.cell] = x.value));
+      if (!Object.values(val).some((x) => x.trim())) {
+        toast("Bạn chưa điền ô nào.");
+        return;
+      }
+      cells.forEach((c) => (ok[c.id] = c.check(val[c.id] || "")));
+      const score = cells.filter((c) => ok[c.id]).length;
+      pr.hResult = { val, ok, score, total: cells.length, show: false };
+      state.handRuns.push({ date: realToday(), algo: a, score, total: cells.length });
+      const key = `hand:${a}`;
+      if (score < cells.length || state.srs[key]) state.srs[key] = PR.review(state.srs[key], score === cells.length, realToday());
+      save();
+      renderPracticeBody();
+      renderToday();
+    };
+    const show = el.querySelector("#handShow");
+    if (show) show.onclick = () => { pr.hResult.show = !pr.hResult.show; renderPracticeBody(); };
+    const steps = el.querySelector("#handSteps");
+    if (steps) steps.onclick = () => { stopSim(); pr.algo = a; pr.graph = g; pr.src = 1; pr.step = 0; pr.view = "sim"; renderPractice(); };
+  }
+
+  // ---------- Câu hỏi chấm tự động ----------
+  const plain = (h) => String(h).replace(/<[^>]+>/g, "");
+  function quizCard(q, opts = {}) {
+    const done = state.quizDone[q.id];
+    const t = topicById(q.topic);
+    const r = pr.qOpen[q.id];
+    let input = "";
+    if (q.type === "mcq" || q.type === "multi") {
+      input = `<div class="choices">${q.choices.map((c, i) => {
+        const mark = r ? (([].concat(q.answer)).includes(i) ? "ok" : ([].concat(r.resp)).map(Number).includes(i) ? "bad" : "") : "";
+        return `<label class="choice ${mark}"><input type="${q.type === "mcq" ? "radio" : "checkbox"}" name="c-${q.id}" value="${i}" ${r && [].concat(r.resp).map(Number).includes(i) ? "checked" : ""}> <span>${c}</span></label>`;
+      }).join("")}</div>`;
+    } else if (q.type === "output") {
+      input = `<pre><code>${esc(q.code)}</code></pre><textarea class="out" name="a-${q.id}" rows="3" placeholder="Gõ chính xác những gì chương trình in ra">${esc(r ? r.resp : "")}</textarea>`;
+    } else {
+      input = `<input name="a-${q.id}" class="${q.type === "number" ? "" : "wide"}" ${q.type === "number" ? 'inputmode="decimal"' : ""} value="${esc(r ? r.resp : "")}" placeholder="${q.type === "number" ? "Nhập số" : "Nhập đáp án"}" autocomplete="off">`;
+    }
+    const ansText = q.type === "mcq" ? plain(q.choices[q.answer]) : q.type === "multi" ? q.answer.map((i) => plain(q.choices[i])).join("; ") : q.type === "text" ? [].concat(q.answer)[0] : String(q.answer);
+    return `<form class="card quiz" data-quiz="${q.id}">
+      <div class="small muted">${t ? `<span class="pill ${t.subject}">${LIB.subjects[t.subject].name}</span> ${esc(t.title)}` : ""}
+        ${done ? (done.ok ? ' · <span class="ok">đã làm đúng</span>' : " · đã làm sai") : ""}${opts.due ? " · đến hạn ôn" : ""}</div>
+      <div class="q">${q.q}</div>
+      ${input}
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn">Kiểm tra</button>
+        ${r ? `<span class="${r.ok ? "ok" : "bad-t"}"><b>${r.ok ? "Đúng" : "Chưa đúng"}</b></span>` : ""}</div>
+      ${r ? `<div class="explain">${r.ok ? "" : `<p><b>Đáp án:</b> ${q.type === "output" ? `<code style="white-space:pre">${esc(ansText)}</code>` : esc(ansText)}</p>`}<p>${q.explain}</p></div>` : ""}
+    </form>`;
+  }
+
+  function bindQuiz(el, after) {
+    el.querySelectorAll("form[data-quiz]").forEach((f) => (f.onsubmit = (e) => {
+      e.preventDefault();
+      const q = QZ.find((x) => x.id === f.dataset.quiz);
+      let resp;
+      if (q.type === "mcq") resp = (f.querySelector("input:checked") || {}).value;
+      else if (q.type === "multi") resp = [...f.querySelectorAll("input:checked")].map((x) => x.value);
+      else resp = f.querySelector(`[name="a-${q.id}"]`).value;
+      if (resp === undefined || resp === "" || (Array.isArray(resp) && !resp.length)) {
+        toast("Bạn chưa trả lời.");
+        return;
+      }
+      const ok = PR.grade(q, resp);
+      pr.qOpen[q.id] = { resp, ok };
+      const prev = state.quizDone[q.id];
+      state.quizDone[q.id] = { ok: ok || !!(prev && prev.ok && ok), date: realToday(), tries: (prev ? prev.tries : 0) + 1 };
+      const key = `q:${q.id}`;
+      if (!ok || state.srs[key]) state.srs[key] = PR.review(state.srs[key], ok, realToday());
+      save();
+      after();
+      renderToday();
+    }));
+  }
+
+  function renderQuiz(el) {
+    if (!QZ.length) {
+      el.innerHTML = `<div class="card"><p class="muted">Chưa có câu hỏi nào.</p></div>`;
+      return;
+    }
+    const topics = quizTopics(pr.qSubject);
+    if (!pr.qTopic || !topics.some((t) => t.id === pr.qTopic)) {
+      const d = today();
+      const day = in30(d) ? L.daysBetween(S().exam30Start, d) + 1 : 0;
+      const t = topics.find((x) => (x.days || []).includes(day)) || topics[0];
+      pr.qTopic = t ? t.id : "";
+    }
+    const list = QZ.filter((q) => q.topic === pr.qTopic);
+    const okN = (ts) => QZ.filter((q) => ts.includes(q.topic) && state.quizDone[q.id] && state.quizDone[q.id].ok).length;
+    const allN = (ts) => QZ.filter((q) => ts.includes(q.topic)).length;
+    const ids = topics.map((t) => t.id);
+    el.innerHTML = `
+      <div class="card"><div class="row lib-tools">
+        <div class="chips">${[["graph", "Đồ thị"], ["oop", "OOP"]].map(([k, n]) => `<button type="button" class="chip ${pr.qSubject === k ? "active" : ""}" data-qsub="${k}">${n}</button>`).join("")}</div>
+        <label class="field" style="flex:1;min-width:220px">Chủ đề<select id="qTopic">${topics.map((t) => `<option value="${t.id}" ${pr.qTopic === t.id ? "selected" : ""}>${esc(t.title)} (${okN([t.id])}/${allN([t.id])})</option>`).join("")}</select></label>
+        <span class="muted small">Đúng ${okN(ids)}/${allN(ids)} câu ${pr.qSubject === "graph" ? "Đồ thị" : "OOP"}</span>
+      </div>
+      <p class="small muted" style="margin:8px 0 0">Câu làm sai sẽ tự vào mục Ôn lại và quay lại sau 1, 2, 4, 7, 15, 30 ngày cho tới khi bạn làm đúng liên tiếp. ${docLink(topicById(pr.qTopic), "Xem lý thuyết chủ đề này")}</p></div>
+      <div id="quizList">${list.map((q) => quizCard(q)).join("")}</div>`;
+    el.querySelectorAll("[data-qsub]").forEach((b) => (b.onclick = () => { pr.qSubject = b.dataset.qsub; pr.qTopic = ""; renderPracticeBody(); }));
+    el.querySelector("#qTopic").onchange = (e) => { pr.qTopic = e.target.value; renderPracticeBody(); };
+    bindQuiz(el, () => renderPracticeBody());
+  }
+
+  // ---------- Ôn lại ----------
+  function exerciseByKey(key) {
+    const [tid, i] = key.split(":");
+    const t = topicById(tid);
+    return t && t.exercises[Number(i)] ? { t, e: t.exercises[Number(i)], i: Number(i) } : null;
+  }
+
+  function renderReview(el) {
+    const items = dueList();
+    const all = Object.keys(state.srs).filter((k) => state.srs[k].due).length;
+    const cards = items.map((it) => {
+      const [kind, ...rest] = it.key.split(":");
+      const id = rest.join(":");
+      if (kind === "q") {
+        const q = QZ.find((x) => x.id === id);
+        return q ? quizCard(q, { due: true }) : "";
+      }
+      if (kind === "ex") {
+        const x = exerciseByKey(id);
+        if (!x) return "";
+        return `<div class="card quiz"><div class="small muted"><span class="pill ${x.t.subject}">${LIB.subjects[x.t.subject].name}</span> ${esc(x.t.title)} · bài tập trong Tài liệu</div>
+          <div class="q">${x.e.q}</div>
+          <details class="ans"><summary>Xem đáp án</summary><div>${x.e.a}</div></details>
+          <div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="btn" data-exgrade="${esc(id)}|1">Mình làm đúng</button><button type="button" class="btn ghost" data-exgrade="${esc(id)}|0">Vẫn sai</button></div></div>`;
+      }
+      if (kind === "hand") {
+        const A = GA.ALGOS[id];
+        return A ? `<div class="card quiz"><div class="small muted">Luyện chạy tay</div><div class="q">Chạy tay <b>${A.name}</b> trên một đồ thị mới.</div>
+          <button type="button" class="btn" data-practice="hand:${id}">Làm đề mới</button></div>` : "";
+      }
+      return "";
+    }).join("");
+    el.innerHTML = `<div class="card"><p>${items.length ? `Hôm nay có <b>${items.length}</b> mục cần ôn.` : "Hôm nay không có gì cần ôn."} <span class="muted small">Đang theo dõi ${all} mục làm sai.</span></p>
+      <p class="small muted">Mục ở đây đến từ câu hỏi làm sai, bài chạy tay chưa đúng hết và bài tập trong tab Tài liệu bạn đánh dấu "làm sai". Làm đúng thì lần ôn sau giãn ra (1, 2, 4, 7, 15, 30 ngày), làm sai thì quay lại từ ngày mai.</p></div>${cards}`;
+    bindQuiz(el, () => renderPracticeBody());
+  }
+
+  function exGrade(key, ok) {
+    const k = `ex:${key}`;
+    if (!ok || state.srs[k]) state.srs[k] = PR.review(state.srs[k], ok, realToday());
+    if (ok) state.exDone[key] = state.exDone[key] || realToday();
+    save();
+  }
+
+  function renderPracticeBody() {
+    const el = document.getElementById("practiceBody");
+    if (!el) return;
+    if (pr.view === "sim") renderSim(el);
+    else if (pr.view === "hand") renderHand(el);
+    else if (pr.view === "quiz") renderQuiz(el);
+    else renderReview(el);
+    const n = dueList().length;
+    const b = document.querySelector('[data-pview="review"]');
+    if (b) b.textContent = `Ôn lại${n ? ` (${n})` : ""}`;
+  }
+
+  function renderPractice() {
+    const el = document.getElementById("tab-practice");
+    el.innerHTML = `<h2>Luyện tập Đồ thị + OOP</h2>
+      <div class="chips" style="margin-bottom:14px">${PVIEWS.map(([k, n]) => `<button type="button" class="chip ${pr.view === k ? "active" : ""}" data-pview="${k}">${n}</button>`).join("")}</div>
+      <div id="practiceBody"></div>`;
+    el.querySelectorAll("[data-pview]").forEach((b) => (b.onclick = () => { stopSim(); pr.view = b.dataset.pview; renderPractice(); }));
+    renderPracticeBody();
+  }
+
+  // Mở phần luyện tập từ nơi khác: "sim:bfs", "hand:dijkstra", "quiz:g-bfs", "review"
+  function openPractice(spec) {
+    const [kind, arg] = spec.split(":");
+    stopSim();
+    if (kind === "sim" && GA.ALGOS[arg]) { pr.algo = arg; pr.step = 0; }
+    if (kind === "hand" && GA.ALGOS[arg]) { pr.hAlgo = arg; newHand(); }
+    if (kind === "quiz") { const t = topicById(arg); if (t) { pr.qSubject = t.subject; pr.qTopic = arg; } }
+    pr.view = kind;
+    showTab("practice");
+    renderPractice();
+    window.scrollTo(0, 0);
+  }
+
+  // Nút luyện tập gắn vào từng việc trong lịch 30 ngày
+  function practiceLinks(subject, day) {
+    return topicsForDay(subject, day).map((t) => {
+      const sims = algoOfTopic(t.id);
+      return (sims.length ? `<button type="button" class="doclink" data-practice="sim:${sims[0]}">Mô phỏng</button>` : "") +
+        (QZ.some((q) => q.topic === t.id) ? `<button type="button" class="doclink" data-practice="quiz:${t.id}">Câu hỏi</button>` : "");
+    }).join("");
+  }
+
   // ---------- Nhật ký ----------
   function renderLog() {
     const el = document.getElementById("tab-log");
@@ -938,6 +1400,7 @@
   function renderAll() {
     renderToday();
     renderExam30();
+    renderPractice();
     renderIelts();
     renderHsk();
     renderLibrary();
@@ -955,6 +1418,22 @@
   document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
   // Nút "Tài liệu" ở mọi tab mở thẳng chủ đề tương ứng
   document.addEventListener("click", (e) => {
+    const pb = e.target.closest("[data-practice]");
+    if (pb) {
+      e.preventDefault();
+      openPractice(pb.dataset.practice);
+      return;
+    }
+    const xb = e.target.closest("[data-exgrade]");
+    if (xb) {
+      const [key, ok] = xb.dataset.exgrade.split("|");
+      exGrade(key, ok === "1");
+      if (xb.closest("#tab-practice")) renderPracticeBody();
+      else renderLibList();
+      renderToday();
+      toast(ok === "1" ? "Đã ghi là làm đúng" : "Đã cho vào sổ ôn lại, ngày mai làm lại");
+      return;
+    }
     const b = e.target.closest("[data-topic]");
     if (!b) return;
     e.preventDefault();
