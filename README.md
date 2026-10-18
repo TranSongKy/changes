@@ -8,6 +8,11 @@ Website chạy trên máy (local) để theo dõi và tối ưu lộ trình họ
   - Luyện chạy tay: web sinh đề mới, bạn điền kết quả, web chấm từng ô và cho xem lại từng bước.
   - Câu hỏi chấm tự động (trắc nghiệm, điền số, đoán output của code C++/Java) theo từng chủ đề.
   - Ôn lại: câu sai, đề chạy tay chưa đúng hết và bài tập trong tab Tài liệu bạn đánh dấu "làm sai" quay lại sau 1, 2, 4, 7, 15, 30 ngày.
+- **Luyện IELTS**:
+  - Phòng thi Listening/Reading: chọn đề Cambridge, mở sách PDF ngay bên cạnh, bấm giờ 40/60 phút, điền phiếu 40 câu. Sau đó đối chiếu Answer key cuối sách để tích câu đúng, web quy ra band ước tính và lưu kết quả. Điểm được điền sẵn khi nhập đề thử ở tab IELTS.
+  - Writing: bấm giờ 20/40 phút, đếm từ, tự chấm theo 4 tiêu chí, lưu bài và chép bài để gửi người sửa.
+  - Speaking Part 2: 24 đề, 1 phút chuẩn bị, 2 phút nói, tự ghi âm để nghe lại (cần mở bằng `npm start` để trình duyệt cho dùng micro).
+- **Luyện HSK**: thẻ từ lặp lại ngắt quãng với 305 từ cơ bản HSK 1–2 và từ bạn tự thêm (dán được từ Excel/Anki), đọc thành tiếng bằng giọng tiếng Trung của máy, luyện nghe chọn thanh điệu. Số từ mới mỗi ngày tự lấy theo lộ trình HSK.
 - **IELTS 4.5 → 7.0+**: nhập điểm đề thử, xem band theo thời gian so với lộ trình, ước tính số giờ còn cần, số giờ mỗi tuần để kịp ngày thi, và gợi ý chia giờ dồn vào kỹ năng yếu nhất.
 - **HSK → HSK 4**: nhập số từ đã thuộc, xem cần học bao nhiêu từ mới mỗi ngày để kịp mốc giai đoạn và ngày thi. Mặc định theo chuẩn HSK 3.0 (HSK 4 khoảng 3.245 từ), đổi về HSK 2.0 trong Cài đặt.
 - **Hôm nay**: việc cần làm trong ngày theo giai đoạn và thứ trong tuần, giờ đã học trong tuần, chuỗi ngày học, bấm giờ, mốc sắp tới.

@@ -15,6 +15,7 @@
       hoursPerBand: 250,
       weeklyIeltsHours: 13,
       weeklyHskHours: 5.5,
+      hskNewPerDay: 0, // 0 = tự tính theo số từ cần học mỗi ngày
     },
 
     // Phần 1: 30 ngày. type "rest" không được dời lịch.

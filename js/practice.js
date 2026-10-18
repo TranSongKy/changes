@@ -61,7 +61,55 @@
       .map(([key, it]) => ({ key, ...it }));
   }
 
-  const api = { INTERVALS, grade, review, due, loose, outputNorm };
+  // Thẻ từ vựng: 0 = quên (ôn lại ngày mai), 1 = khó (giữ hộp), 2 = nhớ (lên hộp).
+  function reviewCard(item, grade, today) {
+    const it = { box: 0, wrong: 0, right: 0, ...(item || {}) };
+    if (grade === 0) {
+      it.wrong++;
+      it.box = 0;
+    } else if (grade === 2) {
+      it.right++;
+      it.box = Math.min(it.box + 1, INTERVALS.length - 1);
+    } else {
+      it.right++;
+    }
+    it.last = today;
+    it.due = addDays(today, INTERVALS[it.box]);
+    return it;
+  }
+
+  // Đổi thanh điệu của pinyin có dấu, để làm phương án nhiễu khi luyện thanh điệu.
+  const TONES = { a: "āáǎà", e: "ēéěè", i: "īíǐì", o: "ōóǒò", u: "ūúǔù", ü: "ǖǘǚǜ" };
+  const MARKED = {};
+  Object.entries(TONES).forEach(([v, ts]) => [...ts].forEach((c, i) => (MARKED[c] = [v, i])));
+  const marks = (p) => [...p].map((c, i) => (MARKED[c] ? i : -1)).filter((i) => i >= 0);
+
+  function retone(p, toneAt) {
+    const chars = [...p];
+    marks(p).forEach((idx, k) => {
+      const [v] = MARKED[chars[idx]];
+      if (toneAt[k] !== undefined) chars[idx] = TONES[v][toneAt[k]];
+    });
+    return chars.join("");
+  }
+
+  // n phương án (gồm đáp án đúng) khác nhau chỉ ở thanh điệu; rnd là hàm ngẫu nhiên trả về [0, 1).
+  function toneOptions(p, n = 4, rnd = Math.random) {
+    const m = marks(p);
+    const opts = new Set([p]);
+    let guard = 0;
+    while (opts.size < n && m.length && guard++ < 200) {
+      opts.add(retone(p, m.map(() => Math.floor(rnd() * 4))));
+    }
+    const list = [...opts];
+    for (let i = list.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    return list;
+  }
+
+  const api = { INTERVALS, grade, review, due, loose, outputNorm, reviewCard, toneOptions, addDays };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Practice = api;
 })(this);
