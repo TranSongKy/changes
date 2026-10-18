@@ -62,3 +62,43 @@ test("đọc danh sách cạnh", () => {
   assert.throws(() => G.parseGraph("1 a"));
   assert.throws(() => G.parseGraph(""));
 });
+
+test("bảng trình bày trên giấy: mọi thuật toán có bảng, dòng gắn đúng bước mô phỏng", () => {
+  for (let seed = 1; seed <= 30; seed++) {
+    for (const [key, A] of Object.entries(G.ALGOS)) {
+      const g = G.randomGraph({ n: 6, m: 9, directed: !!A.needs.directed, dag: key === "topo", seed });
+      const r = A.run(g, 1);
+      assert.ok(r.paper && r.paper.tables.length, key);
+      for (const t of r.paper.tables) {
+        let prev = -1;
+        for (const row of t.rows) {
+          assert.strictEqual(row.cells.length, t.head.length, `${key} ${t.title}`);
+          assert.ok(row.step >= prev && row.step < r.steps.length, `${key} ${t.title} bước ${row.step}`);
+          prev = row.step;
+        }
+      }
+    }
+  }
+});
+
+test("Floyd: ma trận P dựng lại được đường đi đúng độ dài D", () => {
+  for (let seed = 1; seed <= 30; seed++) {
+    const g = G.randomGraph({ n: 6, m: 9, directed: seed % 2 === 0, seed });
+    const r = G.floyd(g);
+    const w = {};
+    g.edges.forEach(([u, v, x]) => {
+      w[`${u},${v}`] = Math.min(w[`${u},${v}`] ?? Infinity, x);
+      if (!g.directed) w[`${v},${u}`] = Math.min(w[`${v},${u}`] ?? Infinity, x);
+    });
+    for (let i = 1; i <= g.n; i++) for (let j = 1; j <= g.n; j++) {
+      if (i === j || r.matrix[i][j] === Infinity) continue;
+      let len = 0, cur = j, guard = 0;
+      while (cur !== i && guard++ < 20) {
+        const p = r.pred[i][cur];
+        len += w[`${p},${cur}`];
+        cur = p;
+      }
+      assert.strictEqual(len, r.matrix[i][j], `seed ${seed} ${i}->${j}`);
+    }
+  }
+});

@@ -6,6 +6,7 @@ Website chạy trên máy (local) để theo dõi và tối ưu lộ trình họ
 - **Luyện tập Đồ thị + OOP**:
   - Mô phỏng BFS, DFS, Dijkstra, Kruskal, Prim, Floyd-Warshall, sắp xếp tô pô chạy từng bước trên hình đồ thị, kèm hàng đợi/ngăn xếp, bảng d và trước, bảng chạy tay Dijkstra, ma trận Floyd. Dùng đồ thị ngẫu nhiên hoặc tự nhập đồ thị trong đề.
   - Luyện chạy tay: web sinh đề mới, bạn điền kết quả, web chấm từng ô và cho xem lại từng bước.
+  - Bảng trình bày trên giấy cho cả 7 thuật toán (bảng duyệt BFS/DFS, bảng nhãn Dijkstra/Prim, bảng xét cạnh Kruskal kèm các thành phần, ma trận D và P của Floyd qua từng đỉnh k, bảng bán bậc vào của tô pô), hiện dần theo mô phỏng hoặc cả bảng, in được; luyện chạy tay có bảng lời giải để so từng dòng.
   - Câu hỏi chấm tự động (trắc nghiệm, điền số, đoán output của code C++/Java) theo từng chủ đề.
   - Ôn lại: câu sai, đề chạy tay chưa đúng hết và bài tập trong tab Tài liệu bạn đánh dấu "làm sai" quay lại sau 1, 2, 4, 7, 15, 30 ngày.
 - **Luyện IELTS**:
