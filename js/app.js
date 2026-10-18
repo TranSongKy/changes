@@ -247,6 +247,12 @@
   }
 
   // ---------- Hôm nay ----------
+  function greet() {
+    if (state.settings.viewDate) return "Lịch học ngày này";
+    const h = new Date().getHours();
+    return h < 11 ? "Chào buổi sáng" : h < 14 ? "Chào buổi trưa" : h < 18 ? "Chào buổi chiều" : "Chào buổi tối";
+  }
+
   function renderToday() {
     const d = today();
     const el = document.getElementById("tab-today");
@@ -256,10 +262,16 @@
     const next = P.milestones.map((m) => ({ ...m, date: msDate(m) })).filter((m) => m.date >= d).slice(0, 3);
 
     let plan = "";
+    let focus = "";
+    const work = []; // [số phút, đã xong] của từng việc trong lịch hôm nay, để vẽ vòng tiến độ
+    const dayDone = (key) => !!(state.daily[d] && state.daily[d][key]);
     if (in30(d)) {
       const { schedule } = schedule30();
       const items = (schedule[d] || []).sort((a, b) => (a.subject < b.subject ? -1 : 1));
       const dayNo = L.daysBetween(S().exam30Start, d) + 1;
+      items.filter((t) => !t.rest).forEach((t) => work.push([SUBJECTS[t.subject].minutes, !!state.done30[t.id]]));
+      work.push([20, dayDone("vocab")]);
+      focus = `Ôn thi Đồ thị + OOP, ngày ${dayNo}/30`;
       plan = `<div class="card"><h3>Ôn thi: ngày ${dayNo}/30</h3><ul class="checks">` +
         items.map((t) => `<li><input type="checkbox" data-t30="${t.id}" ${state.done30[t.id] ? "checked" : ""}>
           <span class="${state.done30[t.id] ? "done" : ""}"><span class="pill ${t.subject}">${SUBJECTS[t.subject].name}</span>
@@ -275,6 +287,9 @@
       const hp = hskPhaseAt(d);
       const scale = hp.minutes / 60;
       const before = d < P.ieltsPhases[0].from;
+      ielts.forEach((it, i) => work.push([it[1], dayDone(`i${i}`)]));
+      P.hskSession.forEach((x, i) => work.push([Math.round(x[0] * scale), dayDone(`h${i}`)]));
+      focus = `IELTS giai đoạn ${ph}${before ? " (chưa bắt đầu)" : ""} · ${hp.name}`;
       plan = `<div class="grid">
         <div class="card"><h3>IELTS · giai đoạn ${ph}${before ? " (chưa bắt đầu)" : ""}</h3>
           ${ielts.length ? `<ul class="checks">${ielts.map((it, i) => dailyItem(d, `i${i}`, "ielts", it[1], `<span class="pill good">${it[0]}</span> ${esc(it[2])} ${docLink(ieltsTopic(it[0], it[2]))}${ieltsMat(it[0], it[2], d)}${ieltsPractice(it[0], it[2], d)}`)).join("")}</ul>` : `<p class="muted">Hôm nay nghỉ IELTS.</p>`}
@@ -287,23 +302,59 @@
           <p class="small"><button type="button" class="doclink" data-practice="cards">Thẻ từ hôm nay: ${cardQueue().due.length + cardQueue().fresh.length} thẻ</button><button type="button" class="doclink" data-practice="tones">Luyện thanh điệu</button></p></div></div>`;
     }
 
+    const planned = work.reduce((a, [m]) => a + m, 0);
+    const doneMin = work.reduce((a, [m, ok]) => a + (ok ? m : 0), 0);
+    const ratio = planned ? doneMin / planned : 0;
+    const R = 34, C = 2 * Math.PI * R;
+    const ring = `<svg class="ring" viewBox="0 0 84 84" aria-hidden="true"><circle cx="42" cy="42" r="${R}" class="ring-bg"/>
+      ${ratio > 0 ? `<circle cx="42" cy="42" r="${R}" class="ring-fg" stroke-dasharray="${(C * ratio).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 42 42)"/>` : ""}
+      <text x="42" y="47" text-anchor="middle">${Math.round(ratio * 100)}%</text></svg>`;
+
+    // Ô bắt đầu nhanh: mỗi ô mở thẳng một phần luyện tập
+    const cq = cardQueue();
+    const cards = cq.due.length + cq.fresh.length;
+    const nextTest = camTests().find((t) => t.date >= d && !camMock(t.id));
+    const quizTopics = [...new Set(QZ.map((q) => q.topic))];
+    let qTopic = null;
+    if (in30(d)) {
+      const day = L.daysBetween(S().exam30Start, d) + 1;
+      qTopic = ["graph", "oop"].flatMap((sj) => topicsForDay(sj, day)).find((t) => quizTopics.includes(t.id));
+    }
+    if (!qTopic && quizTopics.length) qTopic = topicById(quizTopics[Math.abs(L.daysBetween("2026-01-01", d)) % quizTopics.length]);
+    const tile = (spec, cls, title, sub, n) => `<button type="button" class="tile ${cls}" data-practice="${spec}">
+      <span class="tile-n">${n}</span><b>${title}</b><span class="small muted">${sub}</span></button>`;
+    const dueN = dueList().length;
+    const tiles = [
+      tile("review", dueN ? "warn" : "", "Ôn câu sai", dueN ? "đến hạn hôm nay" : "không có câu nào đến hạn", dueN),
+      tile("cards", "hsk", "Thẻ từ HSK", `${cq.due.length} ôn, ${cq.fresh.length} từ mới`, cards),
+      tile(nextTest ? `test:${nextTest.id}` : "test", "ielts", nextTest ? camLabel(nextTest.id) : "Phòng thi IELTS",
+        nextTest ? `lịch làm ${fmtShort(nextTest.date)}` : "Listening, Reading có bấm giờ", nextTest ? "▶" : "⏱"),
+      qTopic ? tile(`quiz:${qTopic.id}`, "graph", "Câu hỏi hôm nay", esc(qTopic.title), QZ.filter((q) => q.topic === qTopic.id).length) : "",
+      tile("writing", "", "Viết IELTS", state.wDraft.text.trim() ? "đang có bài viết dở" : `${state.essays.length} bài đã lưu`, "✎"),
+    ].join("");
+
     el.innerHTML = `
-      <div class="card"><form class="row" id="viewDateForm">
-        <label>Xem ngày<input type="date" id="viewDate" value="${d}"></label>
-        <button class="btn ghost" type="button" id="backToday">Về hôm nay</button>
-        <span class="muted small" style="margin-left:auto">${fmt(d)}${state.settings.viewDate ? " · đang xem thử" : ""}</span>
-      </form></div>
-      <div class="grid">
-        <div class="card"><div class="muted small">Chuỗi ngày học</div><div class="stat">${st} <small>ngày</small></div></div>
-        <div class="card"><div class="muted small">IELTS tuần này</div><div class="stat">${hrs(tot("ielts"))} <small>/ ${num(S().weeklyIeltsHours)} giờ</small></div>
-          <div class="bar"><span style="width:${pct(tot("ielts") / 60, S().weeklyIeltsHours)}%;background:var(--ielts)"></span></div></div>
-        <div class="card"><div class="muted small">HSK tuần này</div><div class="stat">${hrs(tot("hsk"))} <small>/ ${num(S().weeklyHskHours)} giờ</small></div>
-          <div class="bar"><span style="width:${pct(tot("hsk") / 60, S().weeklyHskHours)}%;background:var(--hsk)"></span></div></div>
-        <div class="card"><div class="muted small">Đồ thị + OOP tuần này</div><div class="stat">${hrs(tot("graph") + tot("oop"))} <small>giờ</small></div></div>
+      <div class="hero">
+        <div class="hero-main">
+          <div class="muted small">${fmt(d)}${state.settings.viewDate ? " · đang xem thử" : ""}</div>
+          <h2>${greet()}</h2>
+          <p class="hero-focus">${esc(focus)}</p>
+          <div class="hero-pills">${next.map((m) => `<span class="cd"><b>${L.daysBetween(d, m.date)}</b> ngày tới ${esc(m.label)}</span>`).join("")}
+            ${st ? `<span class="cd streak"><b>${st}</b> ngày học liền</span>` : ""}</div>
+        </div>
+        <div class="hero-ring">${ring}<div class="small"><b>${doneMin}</b> / ${planned} phút<br><span class="muted">theo lịch hôm nay</span></div></div>
       </div>
-      
-      ${dueList().length ? `<div class="alert warn">Hôm nay có ${dueList().length} mục cần ôn lại (câu làm sai từ các lần trước). <button type="button" class="doclink" data-practice="review">Ôn ngay</button></div>` : ""}
+      <div class="tiles">${tiles}</div>
+      <h2 class="sec">Lịch hôm nay</h2>
       ${plan}
+      <h2 class="sec">Tuần này</h2>
+      <div class="grid stats">
+        <div class="card"><div class="muted small">IELTS</div><div class="stat">${hrs(tot("ielts"))} <small>/ ${num(S().weeklyIeltsHours)} giờ</small></div>
+          <div class="bar"><span style="width:${pct(tot("ielts") / 60, S().weeklyIeltsHours)}%;background:var(--ielts)"></span></div></div>
+        <div class="card"><div class="muted small">HSK</div><div class="stat">${hrs(tot("hsk"))} <small>/ ${num(S().weeklyHskHours)} giờ</small></div>
+          <div class="bar"><span style="width:${pct(tot("hsk") / 60, S().weeklyHskHours)}%;background:var(--hsk)"></span></div></div>
+        <div class="card"><div class="muted small">Đồ thị + OOP</div><div class="stat">${hrs(tot("graph") + tot("oop"))} <small>giờ</small></div></div>
+      </div>
       <div class="grid">
         <div class="card"><h3>Bấm giờ</h3><div class="timer">
           <div class="clock" id="clock">00:00</div>
@@ -313,7 +364,11 @@
         <div class="card"><h3>Mốc sắp tới</h3><div class="timeline">
           ${next.map((m) => `<div class="ms"><span class="when">${fmtShort(m.date)}/${m.date.slice(2, 4)}</span><span>${esc(m.label)} <span class="pill">${L.daysBetween(d, m.date)} ngày</span></span></div>`).join("") || `<p class="muted">Không còn mốc nào.</p>`}
         </div></div>
-      </div>`;
+      </div>
+      <div class="card"><form class="row" id="viewDateForm">
+        <label>Xem lịch của ngày khác<input type="date" id="viewDate" value="${d}"></label>
+        <button class="btn ghost" type="button" id="backToday">Về hôm nay</button>
+      </form></div>`;
 
     bindChecks(el);
     el.querySelector("#viewDate").onchange = (e) => {
@@ -443,7 +498,7 @@
 
     el.innerHTML = `
       <h2>30 ngày ôn Lý thuyết đồ thị và OOP</h2>
-      <div class="grid">
+      <div class="grid stats">
         <div class="card"><div class="muted small">Đồ thị</div><div class="stat">${count("graph")} <small>/ ${total("graph")} việc</small></div>
           <div class="bar"><span style="width:${pct(count("graph"), total("graph"))}%;background:var(--graph)"></span></div></div>
         <div class="card"><div class="muted small">OOP</div><div class="stat">${count("oop")} <small>/ ${total("oop")} việc</small></div>
@@ -731,7 +786,7 @@
   function renderShelf() {
     const el = document.getElementById("tab-shelf");
     if (!MAT) {
-      el.innerHTML = `<h2>Thư viện</h2><div class="card"><p>Máy này chưa có danh sách tài liệu.</p>
+      el.innerHTML = `<h2>Sách và đề</h2><div class="card"><p>Máy này chưa có danh sách tài liệu.</p>
         <ol class="small"><li>Chép các PDF vào thư mục <code>materials/</code> cạnh <code>index.html</code>, ví dụ <code>materials/ielts/cambridge/Cambridge 7.pdf</code>.</li>
         <li>Nếu có danh sách file Google Drive, đặt ở <code>materials/inventory.json</code> để có thêm link Drive.</li>
         <li>Chạy <code>npm run materials</code> rồi tải lại trang.</li></ol>
@@ -759,7 +814,7 @@
     }).join("");
 
     el.innerHTML = `
-      <h2>Thư viện: sách và đề của bạn</h2>
+      <h2>Sách và đề của bạn</h2>
       <div class="grid">
         <div class="card"><div class="muted small">Đề Cambridge đã làm</div><div class="stat">${doneTests} <small>/ ${tests.length} đề</small></div>
           <div class="bar"><span style="width:${pct(doneTests, tests.length)}%;background:var(--ielts)"></span></div></div>
@@ -1394,7 +1449,7 @@
           <button type="button" class="btn" id="wGo">${pr.wRun ? "Tạm dừng" : el2 ? "Viết tiếp" : "Bắt đầu"}</button>
           <button type="button" class="btn ghost" id="wNew">Bài mới</button></div>
       </div>
-      ${docs.length ? `<p class="small" style="margin:8px 0 0">Đề và bài mẫu trong Thư viện: ${docs.map((x) => matLink(x)).join("")}</p>` : ""}</div>
+      ${docs.length ? `<p class="small" style="margin:8px 0 0">Đề và bài mẫu trong Sách và đề: ${docs.map((x) => matLink(x)).join("")}</p>` : ""}</div>
       <div class="card">
         <label class="field">Đề bài (gõ hoặc dán đề vào đây)<textarea id="wPrompt" rows="3">${esc(w.prompt)}</textarea></label>
         <label class="field" style="margin-top:10px">Bài viết<textarea id="wText" rows="16" class="essay" ${scored ? "readonly" : ""}>${esc(w.text)}</textarea></label>
@@ -1947,6 +2002,7 @@
 
   // ---------- khung ----------
   function renderAll() {
+    document.getElementById("sideFoot").textContent = `${fmt(realToday())}. Dữ liệu lưu trong trình duyệt này, nhớ xuất bản sao lưu ở Cài đặt.`;
     renderToday();
     renderExam30();
     renderPractice();
@@ -1958,13 +2014,70 @@
     renderSettings();
   }
 
+  // Thanh bên chia thành nhóm; nhóm có nhiều mục thì hiện hàng mục con phía trên nội dung.
+  const GROUPS = {
+    today: [["today", "Hôm nay"]],
+    practice: [["practice", "Luyện tập"]],
+    plan: [["exam30", "30 ngày ôn thi"], ["ielts", "IELTS"], ["hsk", "HSK"]],
+    docs: [["library", "Lý thuyết và bài tập"], ["shelf", "Sách và đề"]],
+    log: [["log", "Nhật ký"]],
+    settings: [["settings", "Cài đặt"]],
+  };
+  const groupOf = (tab) => Object.keys(GROUPS).find((g) => GROUPS[g].some(([t]) => t === tab)) || "today";
+  const lastInGroup = {};
+
   function showTab(name) {
-    document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+    if (!document.getElementById(`tab-${name}`)) name = "today";
+    const g = groupOf(name);
+    lastInGroup[g] = name;
+    document.querySelectorAll("[data-group]").forEach((b) => {
+      const on = b.dataset.group === g;
+      b.classList.toggle("active", on);
+      if (on) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
+    });
+    const sub = document.getElementById("subtabs");
+    const items = GROUPS[g];
+    sub.hidden = items.length < 2;
+    sub.innerHTML = items.length < 2 ? "" : items.map(([t, label]) =>
+      `<button type="button" data-subtab="${t}" class="${t === name ? "active" : ""}">${label}</button>`).join("");
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.id === `tab-${name}`));
     try { localStorage.setItem(KEY + ".tab", name); } catch (e) { /* bỏ qua */ }
   }
 
-  document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+  document.querySelectorAll("[data-group]").forEach((b) => (b.onclick = () => {
+    showTab(lastInGroup[b.dataset.group] || GROUPS[b.dataset.group][0][0]);
+    window.scrollTo(0, 0);
+  }));
+  document.getElementById("subtabs").onclick = (e) => {
+    const b = e.target.closest("[data-subtab]");
+    if (b) showTab(b.dataset.subtab);
+  };
+
+  // PDF trên máy mở trong khung xem ngay trong trang (màn hình rộng); điện thoại vẫn mở tab mới.
+  const viewer = document.getElementById("viewer");
+  function openViewer(href, title) {
+    document.getElementById("viewerTitle").textContent = title;
+    document.getElementById("viewerOpen").href = href;
+    document.getElementById("viewerFrame").src = href;
+    if (viewer.showModal) viewer.showModal();
+    else window.open(href, "_blank");
+  }
+  function closeViewer() {
+    if (viewer.open) viewer.close();
+  }
+  viewer.addEventListener("close", () => (document.getElementById("viewerFrame").src = "about:blank"));
+  document.getElementById("viewerClose").onclick = closeViewer;
+  viewer.addEventListener("click", (e) => { if (e.target === viewer) closeViewer(); });
+
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest('a[href^="materials/"]');
+    if (a && /\.pdf$/i.test(a.getAttribute("href")) && window.innerWidth >= 700 && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      e.preventDefault();
+      const name = decodeURIComponent(a.getAttribute("href").split("/").pop());
+      openViewer(a.getAttribute("href"), a.title || name);
+    }
+  });
   // Nút "Tài liệu" ở mọi tab mở thẳng chủ đề tương ứng
   document.addEventListener("click", (e) => {
     const pb = e.target.closest("[data-practice]");

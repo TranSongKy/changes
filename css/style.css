@@ -15,7 +15,7 @@
   --oop: #8a4fbf;
   --ielts: #1f8a4c;
   --hsk: #c0562b;
-  --radius: 12px;
+  --radius: 14px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -45,37 +45,203 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-.top {
+/* ---------- Khung trang: thanh bên trên máy tính, thanh dưới trên điện thoại ---------- */
+.app { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
+.side {
+  align-self: start;
   position: sticky;
   top: 0;
-  z-index: 5;
-  background: var(--bg);
-  border-bottom: 1px solid var(--line);
-  padding: 14px 16px 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 12px;
+  background: var(--card);
+  border-right: 1px solid var(--line);
 }
-
-.brand h1 { margin: 0; font-size: 20px; }
-.sub { margin: 2px 0 10px; color: var(--muted); font-size: 13px; }
-
-.tabs { display: flex; gap: 4px; overflow-x: auto; }
-.tabs button {
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 6px; }
+.brand b { display: block; font-size: 16px; }
+.brand small { display: block; color: var(--muted); font-size: 11.5px; }
+.logo {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent), var(--oop));
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: .5px;
+}
+.ico { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav button, .bottom-nav button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   border: 0;
   background: none;
   color: var(--muted);
-  padding: 8px 12px;
   font: inherit;
-  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.nav button { padding: 9px 12px; border-radius: 10px; text-align: left; }
+.nav button:hover { background: var(--bg); color: var(--text); }
+.nav button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.side-foot { margin: auto 6px 0; color: var(--muted); font-size: 12px; }
+
+.content { min-width: 0; }
+.top { display: none; }
+.subtabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 12px 24px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+.subtabs[hidden] { display: none; }
+.subtabs button {
+  font: inherit;
+  font-size: 14px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  border-radius: 99px;
+  padding: 5px 14px;
   cursor: pointer;
   white-space: nowrap;
 }
-.tabs button.active { color: var(--text); border-color: var(--accent); font-weight: 600; }
+.subtabs button.active { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
+.bottom-nav { display: none; }
 
-main { max-width: 1040px; margin: 0 auto; padding: 18px 16px 60px; }
+main { max-width: 1080px; margin: 0 auto; padding: 24px 24px 60px; }
 .tab { display: none; }
-.tab.active { display: block; }
+.tab.active { display: block; animation: fade .18s ease-out; }
+@keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 899px) {
+  .app { display: block; }
+  .side { display: none; }
+  .top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--card);
+    border-bottom: 1px solid var(--line);
+  }
+  .top .logo { width: 28px; height: 28px; font-size: 11px; border-radius: 8px; }
+  .iconbtn { border: 0; background: none; color: var(--muted); padding: 6px; border-radius: 8px; cursor: pointer; }
+  .iconbtn.active { color: var(--accent); background: var(--accent-soft); }
+  .subtabs { padding: 10px 16px; }
+  main { padding: 16px 16px calc(84px + env(safe-area-inset-bottom)); }
+  .bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    background: var(--card);
+    border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .bottom-nav button { flex-direction: column; gap: 2px; padding: 8px 2px 7px; font-size: 11px; }
+  .bottom-nav button.active { color: var(--accent); font-weight: 600; }
+  main .hero { padding: 18px; }
+  main .hero-main { flex-basis: 100%; }
+  main .cd { font-size: 12px; }
+  main .tiles { grid-template-columns: 1fr 1fr; gap: 10px; }
+  main .tile { padding: 10px 12px; }
+  main .tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  main .grid.stats { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  main .grid.stats .card { padding: 12px; }
+  body .toast { bottom: calc(76px + env(safe-area-inset-bottom)); }
+}
+
+/* ---------- Hôm nay ---------- */
+.hero {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 22px 24px;
+  margin-bottom: 16px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--accent-soft), var(--card) 70%);
+  border: 1px solid var(--line);
+}
+.hero-main { flex: 1 1 420px; min-width: 0; }
+.hero-ring { flex: none; }
+.hero h2 { font-size: 24px; margin: 2px 0 4px; }
+.hero-focus { margin: 0 0 12px; font-weight: 500; }
+.hero-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+.cd { font-size: 13px; background: var(--card); border: 1px solid var(--line); border-radius: 99px; padding: 3px 12px; color: var(--muted); }
+.cd b { color: var(--text); font-size: 14px; }
+.cd.streak b { color: var(--warn); }
+.hero-ring { display: flex; gap: 14px; align-items: center; }
+.ring { width: 84px; height: 84px; }
+.ring circle { fill: none; stroke-width: 9; }
+.ring .ring-bg { stroke: var(--line); }
+.ring .ring-fg { stroke: var(--good); stroke-linecap: round; transition: stroke-dasharray .4s; }
+.ring text { fill: var(--text); font-size: 16px; font-weight: 700; }
+
+.tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); margin-bottom: 22px; }
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: transform .12s, box-shadow .12s;
+}
+.tile:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgb(0 0 0 / .08); }
+.tile.warn { border-left-color: var(--warn); }
+.tile.hsk { border-left-color: var(--hsk); }
+.tile.ielts { border-left-color: var(--ielts); }
+.tile.graph { border-left-color: var(--oop); }
+.tile-n { font-size: 22px; font-weight: 700; line-height: 1.2; }
+h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 6px 0 10px; }
+
+/* ---------- Khung xem PDF ---------- */
+dialog#viewer {
+  width: min(1100px, 94vw);
+  height: 92vh;
+  max-height: 92vh;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--text);
+  overflow: hidden;
+}
+dialog#viewer[open] { display: flex; flex-direction: column; }
+dialog#viewer::backdrop { background: rgb(0 0 0 / .45); }
+.viewer-head { display: flex; gap: 12px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.viewer-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewer-head a { font-size: 14px; }
+#viewerFrame { flex: 1; width: 100%; border: 0; background: var(--bg); }
 
 h2 { font-size: 18px; margin: 0 0 12px; }
 h3 { font-size: 15px; margin: 0 0 8px; }
@@ -87,6 +253,7 @@ h3 { font-size: 15px; margin: 0 0 8px; }
   border-radius: var(--radius);
   padding: 16px;
   margin-bottom: 14px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / .04);
 }
 .grid .card { margin-bottom: 0; }
 .muted { color: var(--muted); }
@@ -203,6 +370,7 @@ svg.chart .target { stroke: var(--warn); stroke-dasharray: 4 4; }
   padding: 8px 14px;
   border-radius: 8px;
   font-size: 14px;
+  z-index: 20;
 }
 
 /* ---------- Tài liệu ---------- */
@@ -252,7 +420,7 @@ details.topic {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   margin-bottom: 10px;
-  scroll-margin-top: 130px;
+  scroll-margin-top: 70px;
 }
 details.topic > summary { padding: 12px 16px; list-style-position: inside; }
 details.topic > summary .muted { margin-left: 6px; }
