@@ -28,7 +28,7 @@ test("mọi kỹ năng trong buổi IELTS mẫu và mọi giai đoạn HSK đề
   const skills = new Set();
   Object.values(PLAN.ieltsWeek).forEach((week) => Object.values(week).forEach((day) => day.forEach((it) => skills.add(it[0]))));
   for (const s of skills) assert.ok(LIB.topics.some((t) => (t.skills || []).includes(s)), `thiếu tài liệu IELTS cho ${s}`);
-  for (const p of PLAN.hskPhases) assert.ok(LIB.topics.some((t) => (t.phases || []).includes(p.id)), `thiếu tài liệu HSK giai đoạn ${p.id}`);
+  for (const p of PLAN.hskStandards["3.0"].phases) assert.ok(LIB.topics.some((t) => (t.phases || []).includes(p.id)), `thiếu tài liệu HSK giai đoạn ${p.id}`);
 });
 
 test("liên kết tài liệu đều dùng https", () => {

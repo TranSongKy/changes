@@ -63,10 +63,29 @@ test("dự báo IELTS cho biết có kịp hay không", () => {
 });
 
 test("dự báo HSK tính số từ mỗi ngày", () => {
-  const r = L.hskProjection({ knownWords: 300, targetLevel: 4, levels: PLAN.hskLevels, today: "2027-03-01", exam: "2028-04-15" });
+  const r = L.hskProjection({ knownWords: 300, targetLevel: 4, levels: PLAN.hskStandards["2.0"].levels, today: "2027-03-01", exam: "2028-04-15" });
   assert.strictEqual(r.level, 2);
   assert.strictEqual(r.remaining, 900);
   assert.ok(r.perDay > 1.5 && r.perDay < 2.5);
+});
+
+test("chuẩn HSK 3.0: HSK 4 cần khoảng 6 từ mỗi ngày từ lúc bắt đầu", () => {
+  const std = PLAN.hskStandards["3.0"];
+  const r = L.hskProjection({ knownWords: 50, targetLevel: 4, levels: std.levels, today: "2026-11-17", exam: "2028-04-15" });
+  assert.strictEqual(r.targetWords, 3245);
+  assert.ok(r.perDay > 5.5 && r.perDay < 7);
+});
+
+test("giai đoạn HSK của cả hai chuẩn liền nhau và số từ tăng dần", () => {
+  for (const [k, std] of Object.entries(PLAN.hskStandards)) {
+    std.phases.forEach((p, i) => {
+      if (i > 0) {
+        assert.strictEqual(L.addDays(std.phases[i - 1].to, 1), p.from, `${k}: giai đoạn ${p.id} không nối tiếp`);
+        assert.ok(p.words > std.phases[i - 1].words, `${k}: số từ giai đoạn ${p.id} không tăng`);
+      }
+    });
+    assert.ok(std.levels.some((l) => l.level === PLAN.defaults.hskTargetLevel), `${k}: không có cấp mục tiêu mặc định`);
+  }
 });
 
 test("tổng tuần và chuỗi ngày học", () => {

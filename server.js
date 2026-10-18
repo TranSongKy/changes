@@ -11,6 +11,7 @@ const TYPES = {
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
+  ".pdf": "application/pdf",
 };
 
 http.createServer((req, res) => {
@@ -20,12 +21,13 @@ http.createServer((req, res) => {
     res.writeHead(403).end();
     return;
   }
-  fs.readFile(file, (err, data) => {
-    if (err) {
+  // Đọc dần từng phần để mở được cả sách PDF hàng trăm MB.
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) {
       res.writeHead(404).end("Not found");
       return;
     }
-    res.writeHead(200, { "Content-Type": TYPES[path.extname(file)] || "application/octet-stream" });
-    res.end(data);
+    res.writeHead(200, { "Content-Type": TYPES[path.extname(file).toLowerCase()] || "application/octet-stream", "Content-Length": st.size });
+    fs.createReadStream(file).pipe(res);
   });
 }).listen(PORT, "127.0.0.1", () => console.log(`Lộ trình học: http://localhost:${PORT}`));
