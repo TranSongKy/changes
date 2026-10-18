@@ -97,6 +97,36 @@
       (order[a.cat] - order[b.cat]) || ((a.book || a.level || 0) - (b.book || b.level || 0)) || (a.title < b.title ? -1 : 1));
   }
 
+  // File audio Listening: nhận sách, đề, phần từ đường dẫn, ví dụ "Cambridge 7/Test 1/Part 2.mp3",
+  // "Cam7_Test1_Section2.mp3" hoặc "C7T1S2.mp3". Trả về null nếu không đọc ra đủ ba số.
+  const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg|oga|opus|wma)$/i;
+  function classifyAudio(relPath) {
+    if (!AUDIO_EXT.test(relPath)) return null;
+    const p = relPath.replace(AUDIO_EXT, "").replace(/[\\]/g, "/");
+    let m = p.match(/(?:^|[^a-z])c(\d{1,2})[\s_-]*t(\d)[\s_-]*(?:s|p)(\d)(?!\d)/i);
+    if (m) return { book: Number(m[1]), test: Number(m[2]), part: Number(m[3]) };
+    const book = p.match(/(?:cambridge|cam|ielts)\D{0,3}(\d{1,2})(?!\d)/i);
+    const test = p.match(/test\D{0,3}(\d)(?!\d)/i);
+    const part = p.match(/(?:part|section|sec|phần)\D{0,3}(\d)(?!\d)/i);
+    if (!book || !test || !part) return null;
+    return { book: Number(book[1]), test: Number(test[1]), part: Number(part[1]) };
+  }
+
+  // local: [{ path, size }] trong materials/. Trả về { "c7t1": ["materials/...Part 1.mp3", ...] } theo thứ tự phần.
+  function buildAudio(local) {
+    const encode = (p) => p.split("/").map(encodeURIComponent).join("/");
+    const out = {};
+    for (const f of local || []) {
+      const c = classifyAudio(f.path);
+      if (!c || c.part < 1 || c.part > 4) continue;
+      const id = `c${c.book}t${c.test}`;
+      out[id] = out[id] || [];
+      if (!out[id][c.part - 1]) out[id][c.part - 1] = "materials/" + encode(f.path);
+    }
+    for (const id of Object.keys(out)) out[id] = out[id].filter(Boolean);
+    return out;
+  }
+
   // Mỗi sách Cambridge có 4 đề. Xếp đề vào các thứ Bảy trước ngày thi IELTS, đề cuối cách ngày thi ít nhất `gap` ngày.
   function cambridgeSchedule(books, exam, gap = 3) {
     const tests = [];
@@ -112,7 +142,7 @@
     return tests;
   }
 
-  const api = { classify, build, cambridgeSchedule, READING_TYPES };
+  const api = { classify, build, classifyAudio, buildAudio, cambridgeSchedule, READING_TYPES };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Materials = api;
 })(this);

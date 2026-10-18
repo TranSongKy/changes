@@ -18,7 +18,7 @@
   // ---------- trạng thái ----------
   function blank() {
     return { settings: { ...P.defaults, viewDate: "" }, done30: {}, daily: {}, logs: [], mocks: [], hskWords: [], exDone: {}, matDone: {}, quizDone: {}, srs: {}, handRuns: [],
-      ieltsSec: [], ieltsDraft: {}, wDraft: { task: 2, prompt: "", text: "", elapsed: 0 }, essays: [], speakLog: [], cards: {}, myWords: [] };
+      ieltsSec: [], ieltsDraft: {}, ansKeys: {}, camPages: {}, wDraft: { task: 2, prompt: "", text: "", elapsed: 0 }, essays: [], speakLog: [], cards: {}, myWords: [] };
   }
 
   function load() {
@@ -146,6 +146,7 @@
     x.drive ? `<a href="${esc(x.drive)}" target="_blank" rel="noopener noreferrer">Drive</a>` : "",
   ].filter(Boolean).join(" · ");
   const camLabel = (id) => id.replace(/^c(\d+)t(\d)$/, "Cambridge $1 Test $2");
+  const testLabel = (id) => (id === "other" ? "Đề khác" : id === "bc1" ? "British Council (đề mẫu)" : camLabel(id));
   function camTests() {
     const books = mats((x) => x.cat === "cambridge").map((x) => x.book);
     return books.length ? M.cambridgeSchedule(books, S().ieltsExam) : [];
@@ -1329,72 +1330,190 @@
     return `<div class="alert ${raw >= need ? "good" : "warn"}">Đúng <b>${raw}/40</b> → band ước tính <b>${band(IT.bandFromRaw(pr.tSkill, raw))}</b>. Cần ${need}/40 cho band ${band(S().ieltsTargetBand)}.</div>`;
   }
 
+  // Audio Listening: một đối tượng Audio dùng chung, không nằm trong trang, để vẽ lại trang không làm dừng tiếng.
+  const AUD = (window.MATERIALS && window.MATERIALS.audio) || {};
+  const aud = { el: typeof Audio !== "undefined" ? new Audio() : null, test: "", list: [], names: [], idx: 0, started: false, done: false };
+  const audioFor = (id) => (pr.aPick && pr.aPick.test === id ? pr.aPick : AUD[id] ? { urls: AUD[id], names: AUD[id].map((u) => decodeURIComponent(u.split("/").pop())) } : null);
+  function audReset() {
+    if (!aud.el) return;
+    aud.el.pause();
+    aud.el.removeAttribute("src");
+    Object.assign(aud, { test: "", list: [], names: [], idx: 0, started: false, done: false });
+  }
+  function audUi() {
+    const info = document.getElementById("aInfo");
+    if (!info || !aud.el) return;
+    const t = aud.el.currentTime || 0, d = aud.el.duration || 0;
+    const part = aud.list.length ? `Phần ${aud.idx + 1}/${aud.list.length}` : "";
+    info.textContent = aud.done ? "Đã nghe xong cả bài." : aud.started ? `${part} · ${fmtClock(t)}${d ? " / " + fmtClock(d) : ""}` : `${aud.list.length} file audio sẵn sàng`;
+    const bar = document.getElementById("aBar");
+    if (bar) bar.style.width = `${d ? (100 * t) / d : 0}%`;
+    const seek = document.getElementById("aSeek");
+    if (seek && d && document.activeElement !== seek) seek.value = String(Math.round((1000 * t) / d));
+    const btn = document.getElementById("aPlay");
+    if (btn) {
+      const exam = state.settings.listenExam !== false;
+      const mine = aud.test === pr.tTest;
+      const playing = mine && aud.started && !aud.done && !aud.el.paused;
+      btn.disabled = exam && playing;
+      btn.textContent = !mine || !aud.started ? "▶ Bắt đầu nghe" : aud.done ? "Nghe lại từ đầu" : !playing ? "▶ Nghe tiếp" : exam ? "Đang phát" : "❚❚ Tạm dừng";
+    }
+    const ex = document.getElementById("aExam");
+    if (ex) ex.disabled = aud.test === pr.tTest && aud.started && !aud.done;
+  }
+  if (aud.el) {
+    aud.el.ontimeupdate = audUi;
+    aud.el.onplay = audUi;
+    aud.el.onpause = audUi;
+    aud.el.onended = () => {
+      if (aud.idx < aud.list.length - 1) {
+        aud.idx++;
+        aud.el.src = aud.list[aud.idx];
+        aud.el.play().catch(() => {});
+      } else {
+        aud.done = true;
+        toast("Hết phần nghe. Dùng thời gian còn lại để soát và chép đáp án.");
+      }
+      audUi();
+    };
+    aud.el.onerror = () => toast("Không phát được file audio này. Thử file mp3 khác.");
+  }
+  function audPlay(test, src) {
+    if (aud.test !== test || aud.done) {
+      audReset();
+      Object.assign(aud, { test, list: src.urls, names: src.names });
+      aud.el.src = aud.list[0];
+    }
+    aud.started = true;
+    aud.el.play().catch(() => toast("Trình duyệt chặn phát tiếng, bấm lại nút nghe."));
+    if (!pr.tRun) tStart();
+  }
+
+  function tStart() {
+    const limit = TEST_MIN[pr.tSkill] * 60;
+    pr.tRun = Date.now();
+    pr.tRunKey = tKey();
+    pr.tTick = setInterval(() => {
+      const c = document.getElementById("tClock");
+      if (!c || pr.view !== "test") return;
+      const left = limit - tElapsed(state.ieltsDraft[pr.tRunKey]);
+      c.textContent = fmtClock(left);
+      c.classList.toggle("over", left < 0);
+      if (left <= 0 && left > -1.2) toast("Hết giờ. Bạn có thể làm tiếp, đồng hồ sẽ tính phần quá giờ.");
+    }, 1000);
+    const go = document.getElementById("tGo");
+    if (go) go.textContent = "Tạm dừng";
+  }
+
+  function listeningCard(book) {
+    if (pr.tTest === "bc1") {
+      const O = IT.OFFICIAL;
+      return `<div class="card"><h3>Đề chính thức có audio</h3>
+        <p>Đề mẫu Listening của British Council chạy trên trang thi máy tính thật: audio, 4 phần, 40 câu, mỗi đoạn chỉ nghe một lần.</p>
+        <p><a class="btn" href="${O.full.url}" target="_blank" rel="noopener noreferrer">Mở đề ở tab mới</a></p>
+        <p class="small muted">Bấm Bắt đầu ở đây để tính giờ, làm bài trên tab kia, xong chép 40 đáp án vào phiếu bên dưới rồi chấm. Nếu link không mở, vào <a href="${O.page}" target="_blank" rel="noopener noreferrer">trang đề luyện của British Council</a>.</p>
+        <details><summary class="small">Luyện riêng từng dạng câu hỏi (có audio, đáp án và transcript)</summary>
+          <ul class="res">${O.tasks.map(([t, u]) => `<li><a href="${u}" target="_blank" rel="noopener noreferrer">${esc(t)}</a></li>`).join("")}</ul></details></div>`;
+    }
+    if (pr.tTest === "other") return "";
+    const src = audioFor(pr.tTest);
+    const exam = state.settings.listenExam !== false;
+    const picker = `<label class="btn ghost filebtn">${src ? "Chọn file khác" : "Chọn file audio trên máy"}<input type="file" id="aPick" accept="audio/*" multiple hidden></label>`;
+    if (!src) {
+      return `<div class="card"><h3>Audio của đề</h3>
+        <p>Sách PDF không kèm audio. Nếu bạn có audio của ${esc(camLabel(pr.tTest))} (đi kèm sách, hoặc thầy cô gửi), chọn 4 file của 4 phần ở đây, web sẽ phát liền mạch như thi thật.</p>
+        <p>${picker}</p>
+        <p class="small muted">Để lần sau không phải chọn lại: chép file vào <code>materials/ielts/audio/Cambridge ${pr.tTest.replace(/^c(\d+)t(\d)$/, "$1/Test $2")}/Part 1.mp3</code> (Part 2, 3, 4 tương tự) rồi chạy <code>npm run materials</code>.
+        Chưa có audio thì làm <button type="button" class="doclink" id="aBc">đề mẫu của British Council</button>, đề đó có sẵn audio.</p></div>`;
+    }
+    return `<div class="card"><h3>Audio của đề</h3>
+      <div class="player"><button type="button" class="btn" id="aPlay">▶ Bắt đầu nghe</button>
+        <div class="player-main"><div class="small" id="aInfo"></div>
+          ${exam ? `<div class="bar"><span id="aBar"></span></div>` : `<input type="range" id="aSeek" min="0" max="1000" value="0">`}</div>
+        ${exam ? "" : `<button type="button" class="btn ghost" id="aPrev" title="Phần trước">⏮</button><button type="button" class="btn ghost" id="aNext" title="Phần sau">⏭</button>`}</div>
+      <p class="small muted">${src.names.map((n, i) => `${i + 1}. ${esc(n)}`).join(" · ")}</p>
+      <div class="row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <label class="small"><input type="checkbox" id="aExam" ${exam ? "checked" : ""}> Như thi thật: nghe một lần, không dừng hay tua</label>${picker}</div></div>`;
+  }
+
   // Các nút bấm giờ và chấm từng câu chỉ sửa đúng chỗ, không vẽ lại cả trang, để sách PDF bên cạnh không bị tải lại về trang đầu.
   function renderTest(el) {
     const tests = camTests();
     if (!pr.tTest) {
       const next = tests.find((t) => !state.ieltsSec.some((x) => x.test === t.id)) || tests[0];
-      pr.tTest = next ? next.id : "other";
+      pr.tTest = next ? next.id : "bc1";
     }
+    if (pr.tTest === "bc1") pr.tSkill = "Listening";
     const dr = tDraft();
-    const book = pr.tTest !== "other" ? matByKey(`cambridge-${pr.tTest.replace(/^c(\d+)t\d$/, "$1")}`) : null;
+    const key = state.ansKeys[tKey()] || null;
+    const nKey = key ? key.filter(Boolean).length : 0;
+    const book = /^c\d+t\d$/.test(pr.tTest) ? matByKey(`cambridge-${pr.tTest.replace(/^c(\d+)t\d$/, "$1")}`) : null;
+    const pages = state.camPages[tKey()] || {};
+    const pdfSrc = (pg) => (book && book.file ? book.file + (pg ? `#page=${pg}` : "") : "");
     const limit = TEST_MIN[pr.tSkill] * 60;
     const raw = dr.marks.filter(Boolean).length;
     const hist = [...state.ieltsSec].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 12);
     const row = (i) => `<div class="arow"><span class="qn">${i + 1}</span>
       <input data-ans="${i}" value="${esc(dr.answers[i])}" autocomplete="off" ${dr.marking ? "readonly" : ""}>
-      ${dr.marking ? `<button type="button" class="mk ${dr.marks[i] ? "on" : ""}" data-mark="${i}" title="Bấm nếu câu này đúng theo đáp án">${dr.marks[i] ? "✓" : "✗"}</button>` : ""}</div>`;
+      ${dr.marking ? `<button type="button" class="mk ${dr.marks[i] ? "on" : ""}" data-mark="${i}" title="Bấm để đổi đúng hoặc sai">${dr.marks[i] ? "✓" : "✗"}</button>` : ""}</div>
+      ${dr.marking && key && key[i] && !dr.marks[i] ? `<div class="keyans">${esc(key[i])}</div>` : ""}`;
+    const showPdf = book && book.file && pr.tPdf;
     el.innerHTML = `
       <div class="card"><div class="row" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
-        <label class="field">Đề<select id="tTest">${tests.map((t) => `<option value="${t.id}" ${pr.tTest === t.id ? "selected" : ""}>${camLabel(t.id)}${state.ieltsSec.some((x) => x.test === t.id) ? " ✓" : ""}</option>`).join("")}<option value="other" ${pr.tTest === "other" ? "selected" : ""}>Đề khác</option></select></label>
-        <label class="field">Kỹ năng<select id="tSkill">${["Listening", "Reading"].map((k) => `<option ${pr.tSkill === k ? "selected" : ""}>${k}</option>`).join("")}</select></label>
+        <label class="field">Đề<select id="tTest">${tests.map((t) => `<option value="${t.id}" ${pr.tTest === t.id ? "selected" : ""}>${camLabel(t.id)}${state.ieltsSec.some((x) => x.test === t.id) ? " ✓" : ""}${AUD[t.id] ? " 🔊" : ""}</option>`).join("")}
+          <option value="bc1" ${pr.tTest === "bc1" ? "selected" : ""}>British Council: đề mẫu có audio 🔊</option>
+          <option value="other" ${pr.tTest === "other" ? "selected" : ""}>Đề khác</option></select></label>
+        <label class="field">Kỹ năng<select id="tSkill" ${pr.tTest === "bc1" ? "disabled" : ""}>${["Listening", "Reading"].map((k) => `<option ${pr.tSkill === k ? "selected" : ""}>${k}</option>`).join("")}</select></label>
         <div class="timer"><div class="clock ${tElapsed(dr) > limit ? "over" : ""}" id="tClock">${fmtClock(limit - tElapsed(dr))}</div>
           <button type="button" class="btn" id="tGo">${pr.tRun ? "Tạm dừng" : dr.elapsed ? "Làm tiếp" : "Bắt đầu"}</button>
           <button type="button" class="btn ghost" id="tReset">Làm lại từ đầu</button></div>
-        ${book ? `<label class="small"><input type="checkbox" id="tPdf" ${pr.tPdf ? "checked" : ""}> Mở sách bên cạnh</label>` : ""}
+        ${book && book.file ? `<label class="small"><input type="checkbox" id="tPdf" ${pr.tPdf ? "checked" : ""}> Mở sách bên cạnh</label>` : ""}
       </div>
-      <p class="small muted" style="margin:8px 0 0">${pr.tSkill === "Listening" ? "40 phút: 30 phút nghe và 10 phút chép đáp án như thi trên giấy. Sách PDF không có audio, bạn mở audio của đúng cuốn và đề này ở ứng dụng khác." : "60 phút cho 3 passage, không có thêm thời gian chép đáp án."}
+      <p class="small muted" style="margin:8px 0 0">${pr.tSkill === "Listening" ? "40 phút: 30 phút nghe và 10 phút chép đáp án như thi trên giấy." : "60 phút cho 3 passage, không có thêm thời gian chép đáp án."}
         ${book && !book.file ? " Sách này chỉ có trên Drive nên không mở bên cạnh được." : ""}</p></div>
-      <div class="${book && book.file && pr.tPdf ? "sim" : ""}">
-        ${book && book.file && pr.tPdf ? `<div class="card pdfbox"><iframe class="pdf" src="${esc(book.file)}" title="${esc(book.title)}"></iframe>
-          <p class="small muted">Tìm ${camLabel(pr.tTest).replace("Cambridge ", "Test ").replace(/^Test \d+ /, "")} trong mục lục. ${matOpen(book)}</p></div>` : ""}
+      ${pr.tSkill === "Listening" ? listeningCard(book) : ""}
+      <div class="${showPdf ? "sim" : ""}">
+        ${showPdf ? `<div class="card pdfbox"><iframe class="pdf" id="tFrame" src="${esc(pdfSrc(pages.q))}" title="${esc(book.title)}"></iframe>
+          <div class="pdfnav small"><label>Trang đề <input type="number" class="cell" id="pgQ" min="1" value="${pages.q || ""}" placeholder="?"></label>
+            <label>Trang đáp án <input type="number" class="cell" id="pgK" min="1" value="${pages.k || ""}" placeholder="?"></label>
+            <button type="button" class="doclink" id="goQ">Xem đề</button><button type="button" class="doclink" id="goK">Xem đáp án</button>
+            <span class="muted">Ghi số trang một lần, lần sau sách mở thẳng tới đó. ${matOpen(book)}</span></div></div>` : ""}
         <div class="card"><h3>Phiếu trả lời ${pr.tSkill}</h3>
           ${dr.marking ? `<div id="tScore">${scoreHtml(raw)}</div>
-            <p class="small muted">Mở phần Answer key cuối sách, bấm vào ô ✗ của mỗi câu đúng để đổi thành ✓.</p>` : ""}
+            <p class="small muted">${nKey ? `Đã tự chấm theo đáp án bạn nhập (${nKey}/40 câu). Câu sai có đáp án đúng ngay bên dưới. Bấm ✓/✗ để sửa nếu cách viết của bạn cũng được chấp nhận.` : "Chưa có đáp án của đề này: dán đáp án ở dưới để web tự chấm, hoặc đối chiếu Answer key cuối sách và bấm ✗ thành ✓ ở mỗi câu đúng."}</p>` : ""}
           <div class="asheet">${sections(pr.tSkill).map(([name, a, b]) => `<div><h4>${name}</h4>${Array.from({ length: b - a + 1 }, (_, k) => row(a - 1 + k)).join("")}</div>`).join("")}</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
             ${dr.marking ? `<button type="button" class="btn" id="tSave">Lưu kết quả</button><button type="button" class="btn ghost" id="tBack">Sửa đáp án</button>`
               : `<button type="button" class="btn" id="tMark">Nộp bài và chấm</button>`}
-          </div></div>
+          </div>
+          <details class="keybox" ${dr.marking && !nKey ? "open" : ""}><summary class="small">Đáp án của đề để tự chấm${nKey ? ` (đã có ${nKey}/40 câu)` : ""}</summary>
+            <p class="small muted">Gõ hoặc dán từ Answer key, mỗi dòng một câu: số rồi đáp án. Nhiều cách viết cách nhau bằng "/", phần có thể bỏ để trong ngoặc, ví dụ <code>3 (the) Elms Close</code>, <code>7 19 / nineteen</code>. Đáp án chỉ lưu trong trình duyệt của bạn.</p>
+            <textarea id="tKeyText" rows="8" placeholder="1 Hardie&#10;2 19 / nineteen&#10;3 (the) Elms Close">${key ? key.map((k, i) => (k ? `${i + 1} ${k}` : "")).filter(Boolean).join("\n") : ""}</textarea>
+            <button type="button" class="btn ghost" id="tKeySave">Lưu đáp án${dr.marking ? " và chấm lại" : ""}</button></details></div>
       </div>
       <div class="card"><h3>Kết quả đã lưu</h3>
         <table><tr><th>Ngày</th><th>Đề</th><th>Kỹ năng</th><th>Đúng</th><th>Band</th><th>Thời gian</th></tr>
-        ${hist.map((x) => `<tr><td>${fmtShort(x.date)}/${x.date.slice(2, 4)}</td><td>${x.test === "other" ? "Đề khác" : camLabel(x.test)}</td><td>${x.skill}</td><td>${x.raw}/40</td><td><b>${band(x.band)}</b></td><td>${Math.round(x.minutes)}'</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Chưa có kết quả nào.</td></tr>`}</table>
+        ${hist.map((x) => `<tr><td>${fmtShort(x.date)}/${x.date.slice(2, 4)}</td><td>${testLabel(x.test)}</td><td>${x.skill}</td><td>${x.raw}/40</td><td><b>${band(x.band)}</b></td><td>${Math.round(x.minutes)}'</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Chưa có kết quả nào.</td></tr>`}</table>
         <p class="small muted">Điểm Listening và Reading của cùng một đề sẽ được điền sẵn khi bạn nhập đề thử ở tab IELTS.</p></div>`;
 
     const rer = () => renderPracticeBody();
-    el.querySelector("#tTest").onchange = (e) => { tStop(); pr.tTest = e.target.value; rer(); };
-    el.querySelector("#tSkill").onchange = (e) => { tStop(); pr.tSkill = e.target.value; rer(); };
+    const autoMark = () => {
+      const k = state.ansKeys[tKey()];
+      if (k) dr.marks = dr.answers.map((a, i) => (k[i] ? IT.checkAnswer(a, k[i]) : dr.marks[i]));
+    };
+    el.querySelector("#tTest").onchange = (e) => { tStop(); audReset(); pr.tTest = e.target.value; rer(); };
+    el.querySelector("#tSkill").onchange = (e) => { tStop(); audReset(); pr.tSkill = e.target.value; rer(); };
     const pdf = el.querySelector("#tPdf");
     if (pdf) pdf.onchange = (e) => { pr.tPdf = e.target.checked; rer(); };
     el.querySelector("#tGo").onclick = (ev) => {
-      if (pr.tRun) tStop();
-      else {
-        pr.tRun = Date.now();
-        pr.tRunKey = tKey();
-        pr.tTick = setInterval(() => {
-          const c = document.getElementById("tClock");
-          if (!c || pr.view !== "test") return;
-          const left = limit - tElapsed(state.ieltsDraft[pr.tRunKey]);
-          c.textContent = fmtClock(left);
-          c.classList.toggle("over", left < 0);
-          if (left <= 0 && left > -1.2) toast("Hết giờ. Bạn có thể làm tiếp, đồng hồ sẽ tính phần quá giờ.");
-        }, 1000);
-      }
-      ev.target.textContent = pr.tRun ? "Tạm dừng" : "Làm tiếp";
+      if (pr.tRun) {
+        tStop();
+        ev.target.textContent = "Làm tiếp";
+      } else tStart();
     };
     el.querySelector("#tReset").onclick = () => {
       tStop();
+      audReset();
       delete state.ieltsDraft[tKey()];
       save();
       rer();
@@ -1412,21 +1531,95 @@
       el.querySelector("#tScore").innerHTML = scoreHtml(dr.marks.filter(Boolean).length);
     }));
     const mk = el.querySelector("#tMark");
-    if (mk) mk.onclick = () => { tStop(); dr.marking = true; save(); rer(); };
+    if (mk) mk.onclick = () => { tStop(); dr.marking = true; autoMark(); save(); rer(); };
     const back = el.querySelector("#tBack");
     if (back) back.onclick = () => { dr.marking = false; save(); rer(); };
+    el.querySelector("#tKeySave").onclick = () => {
+      const k = IT.parseKey(el.querySelector("#tKeyText").value);
+      const n = k.filter(Boolean).length;
+      if (!n) { toast("Chưa đọc được dòng nào. Mỗi dòng cần bắt đầu bằng số câu, ví dụ: 1 Hardie"); return; }
+      state.ansKeys[tKey()] = k;
+      if (dr.marking) autoMark();
+      save();
+      rer();
+      toast(`Đã lưu đáp án ${n}/40 câu`);
+    };
     const sv = el.querySelector("#tSave");
     if (sv) sv.onclick = () => {
       const raw = dr.marks.filter(Boolean).length;
       state.ieltsSec.push({ id: Date.now(), date: realToday(), test: pr.tTest, skill: pr.tSkill, raw, band: IT.bandFromRaw(pr.tSkill, raw), minutes: tElapsed(dr) / 60 });
-      if (tElapsed(dr) > 60) addLog({ date: realToday(), subject: "ielts", minutes: Math.round(tElapsed(dr) / 60), note: `${pr.tTest === "other" ? "Đề khác" : camLabel(pr.tTest)} ${pr.tSkill}` });
+      if (tElapsed(dr) > 60) addLog({ date: realToday(), subject: "ielts", minutes: Math.round(tElapsed(dr) / 60), note: `${testLabel(pr.tTest)} ${pr.tSkill}` });
       delete state.ieltsDraft[tKey()];
+      audReset();
       save();
       renderAll();
       toast(`Đã lưu: ${pr.tSkill} band ${band(IT.bandFromRaw(pr.tSkill, raw))}`);
     };
-  }
 
+    // Trang sách: nhớ số trang của đề và của Answer key, đổi trang không vẽ lại phiếu trả lời
+    const frame = el.querySelector("#tFrame");
+    const setPage = (field, v) => {
+      const all = (state.camPages[tKey()] = state.camPages[tKey()] || {});
+      if (v > 0) all[field] = v;
+      else delete all[field];
+      save();
+    };
+    const go = (pg) => {
+      if (!frame) return;
+      frame.src = "about:blank";
+      setTimeout(() => (frame.src = pdfSrc(pg)), 30);
+    };
+    const pq = el.querySelector("#pgQ"), pk = el.querySelector("#pgK");
+    if (pq) pq.onchange = () => { setPage("q", Number(pq.value)); go(Number(pq.value)); };
+    if (pk) pk.onchange = () => setPage("k", Number(pk.value));
+    const gq = el.querySelector("#goQ"), gk = el.querySelector("#goK");
+    if (gq) gq.onclick = () => go(Number(pq.value) || 0);
+    if (gk) gk.onclick = () => (Number(pk.value) ? go(Number(pk.value)) : toast("Ghi số trang Answer key trước, xem ở mục lục cuối sách."));
+
+    // Audio
+    const bc = el.querySelector("#aBc");
+    if (bc) bc.onclick = () => { tStop(); pr.tTest = "bc1"; rer(); };
+    const pick = el.querySelector("#aPick");
+    if (pick) pick.onchange = () => {
+      const files = [...pick.files].sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true }));
+      if (!files.length) return;
+      if (pr.aPick) pr.aPick.urls.forEach((u) => URL.revokeObjectURL(u));
+      audReset();
+      pr.aPick = { test: pr.tTest, urls: files.map((f) => URL.createObjectURL(f)), names: files.map((f) => f.name) };
+      rer();
+    };
+    const src = audioFor(pr.tTest);
+    if (src && aud.test && aud.test !== pr.tTest) audReset();
+    if (src && !aud.test) Object.assign(aud, { list: src.urls, names: src.names });
+    const play = el.querySelector("#aPlay");
+    if (play) play.onclick = () => {
+      if (aud.test !== pr.tTest || !aud.started || aud.done) audPlay(pr.tTest, src);
+      else if (aud.el.paused) aud.el.play().catch(() => {});
+      else aud.el.pause();
+      audUi();
+    };
+    const ex = el.querySelector("#aExam");
+    if (ex) ex.onchange = () => {
+      state.settings.listenExam = ex.checked;
+      save();
+      rer();
+    };
+    const seek = el.querySelector("#aSeek");
+    if (seek) seek.oninput = () => { if (aud.el.duration) aud.el.currentTime = (Number(seek.value) / 1000) * aud.el.duration; };
+    const jump = (d) => {
+      if (!aud.list.length) return;
+      if (aud.test !== pr.tTest) Object.assign(aud, { test: pr.tTest });
+      aud.idx = Math.max(0, Math.min(aud.list.length - 1, aud.idx + d));
+      aud.done = false;
+      aud.started = true;
+      aud.el.src = aud.list[aud.idx];
+      aud.el.play().catch(() => {});
+    };
+    const pv = el.querySelector("#aPrev"), nx = el.querySelector("#aNext");
+    if (pv) pv.onclick = () => jump(-1);
+    if (nx) nx.onclick = () => jump(1);
+    audUi();
+  }
   // ---------- Writing ----------
   function renderWriting(el) {
     const w = state.wDraft;
@@ -1826,6 +2019,7 @@
   function stopAllTimers() {
     stopSim();
     tStop();
+    if (aud.el && !aud.el.paused) aud.el.pause();
     stopSpeak();
     if (pr.stopWriting) pr.stopWriting();
   }

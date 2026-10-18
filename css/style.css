@@ -329,7 +329,9 @@ input, select, textarea {
   padding: 6px 8px;
 }
 input[type="number"] { width: 90px; }
-button.btn {
+button.btn, a.btn, label.btn {
+  display: inline-block;
+  text-decoration: none;
   font: inherit;
   border: 0;
   border-radius: 8px;
@@ -338,7 +340,7 @@ button.btn {
   padding: 7px 14px;
   cursor: pointer;
 }
-button.btn.ghost { background: none; color: var(--accent); border: 1px solid var(--line); }
+button.btn.ghost, a.btn.ghost, label.btn.ghost { background: none; color: var(--accent); border: 1px solid var(--line); }
 button.link { border: 0; background: none; color: var(--bad); cursor: pointer; font: inherit; padding: 0; }
 
 .settings { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
@@ -527,3 +529,15 @@ label.field textarea { width: 100%; color: var(--text); }
 .choices.tones { max-width: 360px; margin: 14px auto; }
 .choices.tones .choice { justify-content: center; font: inherit; font-size: 20px; background: var(--card); color: var(--text); }
 #cPer { width: 150px; }
+
+/* ---------- Phòng thi Listening ---------- */
+.player { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.player-main { flex: 1; min-width: 180px; }
+.player-main .bar { margin: 6px 0 0; }
+.player input[type="range"] { width: 100%; accent-color: var(--accent); }
+button.btn:disabled { opacity: .6; cursor: default; }
+.keyans { margin: -2px 0 4px 28px; font-size: 12px; color: var(--good); }
+.pdfnav { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.pdfnav input.cell { width: 64px; }
+details.keybox { margin-top: 14px; }
+details.keybox textarea { width: 100%; font-family: ui-monospace, Consolas, monospace; font-size: 13px; margin: 6px 0; }

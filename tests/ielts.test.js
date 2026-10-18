@@ -32,3 +32,23 @@ test("đề Speaking đủ 4 gợi ý", () => {
   assert.ok(I.CUE_CARDS.length >= 20);
   for (const [t, b] of I.CUE_CARDS) assert.ok(t.startsWith("Describe") && b.length === 4);
 });
+
+test("đọc đáp án dán từ Answer key", () => {
+  const k = I.parseKey("1 Hardie\n2. 19 / nineteen\n3) (the) Elms Close\nLISTENING\n41 bỏ qua\n40 TRUE");
+  assert.strictEqual(k.length, 40);
+  assert.deepStrictEqual(k.slice(0, 3), ["Hardie", "19 / nineteen", "(the) Elms Close"]);
+  assert.strictEqual(k[39], "TRUE");
+  assert.strictEqual(k[3], "");
+});
+
+test("chấm đáp án: nhiều cách viết, phần trong ngoặc có thể bỏ", () => {
+  assert.ok(I.checkAnswer("Elms Close", "(the) Elms Close"));
+  assert.ok(I.checkAnswer("the elms close.", "(the) Elms Close"));
+  assert.ok(I.checkAnswer("nineteen", "19 / nineteen"));
+  assert.ok(I.checkAnswer("1500", "1,500"));
+  assert.ok(I.checkAnswer("b", "B"));
+  assert.ok(I.checkAnswer("keep fit", "keep fit (studio)"));
+  assert.ok(!I.checkAnswer("", "B"));
+  assert.ok(!I.checkAnswer("Hardy", "Hardie"));
+  assert.ok(!I.checkAnswer("the", "(the) Elms Close"));
+});
