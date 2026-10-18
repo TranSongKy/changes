@@ -11,7 +11,7 @@ function walk(dir, rel = "") {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
     const r = rel ? `${rel}/${e.name}` : e.name;
     if (e.isDirectory()) return walk(path.join(dir, e.name), r);
-    return /\.pdf$/i.test(e.name) ? [{ path: r, size: fs.statSync(path.join(dir, e.name)).size }] : [];
+    return /\.(pdf|mp3|m4a|aac|wav|ogg|oga|opus|wma)$/i.test(e.name) ? [{ path: r, size: fs.statSync(path.join(dir, e.name)).size }] : [];
   });
 }
 
@@ -27,17 +27,20 @@ if (fs.existsSync(invFile)) {
 }
 
 const items = M.build(local, inventory);
+const audio = M.buildAudio(local);
 if (!items.length) {
   console.error("Không tìm thấy PDF nào trong materials/. Hãy chép tài liệu vào đó rồi chạy lại.");
   process.exit(1);
 }
 fs.mkdirSync(DIR, { recursive: true });
-const out = `// Tự tạo bởi tools/build-materials.js, đừng sửa tay. Không đưa file này lên GitHub.\nwindow.MATERIALS = ${JSON.stringify({ generated: new Date().toISOString(), items }, null, 1)};\n`;
+const out = `// Tự tạo bởi tools/build-materials.js, đừng sửa tay. Không đưa file này lên GitHub.\nwindow.MATERIALS = ${JSON.stringify({ generated: new Date().toISOString(), items, audio }, null, 1)};\n`;
 fs.writeFileSync(path.join(DIR, "library-data.js"), out);
 
 const byCat = {};
 items.forEach((i) => (byCat[i.cat] = (byCat[i.cat] || 0) + 1));
 console.log(`Đã ghi materials/library-data.js: ${items.length} tài liệu (${items.filter((i) => i.file).length} có trên máy, ${items.filter((i) => !i.file).length} chỉ có trên Drive).`);
 console.log(Object.entries(byCat).map(([k, v]) => `  ${k}: ${v}`).join("\n"));
+const tracks = Object.values(audio).reduce((a, l) => a + l.length, 0);
+console.log(tracks ? `Audio Listening: ${Object.keys(audio).length} đề, ${tracks} file (${Object.keys(audio).sort().join(", ")}).` : "Chưa có audio Listening (chép vào materials/ielts/audio/, ví dụ Cambridge 7/Test 1/Part 1.mp3).");
 const other = items.filter((i) => i.cat === "other");
 if (other.length) console.log("Chưa phân loại được:\n" + other.map((i) => "  " + i.title).join("\n"));

@@ -9,7 +9,9 @@ Website chạy trên máy (local) để theo dõi và tối ưu lộ trình họ
   - Câu hỏi chấm tự động (trắc nghiệm, điền số, đoán output của code C++/Java) theo từng chủ đề.
   - Ôn lại: câu sai, đề chạy tay chưa đúng hết và bài tập trong tab Tài liệu bạn đánh dấu "làm sai" quay lại sau 1, 2, 4, 7, 15, 30 ngày.
 - **Luyện IELTS**:
-  - Phòng thi Listening/Reading: chọn đề Cambridge, mở sách PDF ngay bên cạnh, bấm giờ 40/60 phút, điền phiếu 40 câu. Sau đó đối chiếu Answer key cuối sách để tích câu đúng, web quy ra band ước tính và lưu kết quả. Điểm được điền sẵn khi nhập đề thử ở tab IELTS.
+  - Phòng thi Listening/Reading: chọn đề Cambridge, mở sách PDF ngay bên cạnh (nhớ trang của đề và của Answer key), bấm giờ 40/60 phút, điền phiếu 40 câu. Nhập đáp án của đề một lần thì web tự chấm, chấp nhận nhiều cách viết ("19 / nineteen") và phần trong ngoặc có thể bỏ; chưa có đáp án thì tự tích câu đúng. Web quy ra band ước tính và lưu kết quả, điểm được điền sẵn khi nhập đề thử ở tab IELTS.
+  - Audio Listening: sách PDF không kèm audio. Nếu có audio của đề, chọn file ngay trong phòng thi, hoặc chép vào `materials/ielts/audio/Cambridge 7/Test 1/Part 1.mp3` (Part 2–4 tương tự, tên kiểu `C7T1S1.mp3` cũng được) rồi chạy `npm run materials`. Web phát liền 4 phần; chế độ thi thật chỉ cho nghe một lần, không tua.
+  - Đề mẫu Listening của British Council có sẵn audio (4 phần, 40 câu) và 7 bài luyện từng dạng câu hỏi, mở từ phòng thi.
   - Writing: bấm giờ 20/40 phút, đếm từ, tự chấm theo 4 tiêu chí, lưu bài và chép bài để gửi người sửa.
   - Speaking Part 2: 24 đề, 1 phút chuẩn bị, 2 phút nói, tự ghi âm để nghe lại (cần mở bằng `npm start` để trình duyệt cho dùng micro).
 - **Luyện HSK**: thẻ từ lặp lại ngắt quãng với 305 từ cơ bản HSK 1–2 và từ bạn tự thêm (dán được từ Excel/Anki), đọc thành tiếng bằng giọng tiếng Trung của máy, luyện nghe chọn thanh điệu. Số từ mới mỗi ngày tự lấy theo lộ trình HSK.

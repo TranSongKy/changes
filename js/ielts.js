@@ -94,7 +94,52 @@
     ["Describe an occasion when you used a foreign language.", ["when and where it was", "who you were talking to", "what you talked about", "and explain how you felt"]],
   ];
 
-  const api = { BANDS, bandFromRaw, rawForBand, wordCount, writingBand, CRITERIA, criterionBand, CUE_CARDS };
+  // Đọc đáp án dán từ Answer key: mỗi dòng "số đáp án", ví dụ "3 (the) Elms Close" hoặc "12. 19 / nineteen".
+  // Trả về mảng 40 phần tử, ô trống là câu chưa có đáp án.
+  function parseKey(text) {
+    const key = Array(40).fill("");
+    String(text).split(/\r?\n/).forEach((line) => {
+      const m = line.trim().match(/^(\d{1,2})\s*[.):\-]?\s+(.+)$/);
+      if (m && Number(m[1]) >= 1 && Number(m[1]) <= 40) key[Number(m[1]) - 1] = m[2].trim();
+    });
+    return key;
+  }
+
+  const norm = (s) => String(s).toLowerCase().replace(/[‘’`]/g, "'").replace(/(\d),(\d{3})/g, "$1$2")
+    .replace(/[.,;:!?"]+$/g, "").replace(/\s+/g, " ").trim();
+
+  // Mọi cách viết được chấp nhận của một đáp án: tách theo "/" hoặc "OR", phần trong ngoặc có thể bỏ.
+  function accepted(key) {
+    const out = new Set();
+    String(key).split(/\s*\/\s*|\s+OR\s+/).forEach((alt) => {
+      const opt = alt.match(/\([^)]*\)/g) || [];
+      for (let mask = 0; mask < 1 << opt.length; mask++) {
+        let k = 0;
+        const v = alt.replace(/\(([^)]*)\)/g, (_, inner) => ((mask >> k++) & 1 ? inner : ""));
+        if (norm(v)) out.add(norm(v));
+      }
+    });
+    return [...out];
+  }
+
+  const checkAnswer = (response, key) => !!norm(response) && accepted(key).includes(norm(response));
+
+  // Đề Listening chính thức miễn phí của British Council: có audio, chạy trên trình duyệt, mỗi đoạn nghe một lần.
+  const OFFICIAL = {
+    page: "https://takeielts.britishcouncil.org/take-ielts/prepare/free-ielts-listening-practice-tests",
+    full: { title: "British Council: đề Listening mẫu đầy đủ (4 phần, 40 câu)", url: "https://demo-ielts.inspera.com/player/?assessmentRunId=131012334&context=exam#/section/128121996/question/128121965/scorableItem/1" },
+    tasks: [
+      ["Multiple choice, một đáp án (Part 3)", "https://ielts.inspera.com/player/?assessmentRunId=189697549&context=exam#/section/171826252/question/145591537/scorableItem/1"],
+      ["Multiple choice, nhiều đáp án (Part 1)", "https://ielts.inspera.com/player/?assessmentRunId=189696950&context=exam#/section/171824485/question/145454275/scorableItem/1"],
+      ["Plan, map, diagram labelling (Part 2)", "https://ielts.inspera.com/player/?assessmentRunId=189695339&context=exam#/section/174541820/question/174541819/scorableItem/1"],
+      ["Note completion (Part 1)", "https://ielts.inspera.com/player/?assessmentRunId=189696078&context=exam#/section/184163671/question/184163670/scorableItem/1"],
+      ["Table completion (Part 4)", "https://ielts.inspera.com/player/?assessmentRunId=189652254&context=exam#/section/181038775/question/181038772/scorableItem/1"],
+      ["Sentence completion (Part 3)", "https://ielts.inspera.com/player/?assessmentRunId=189694885&context=exam#/section/184163445/question/171795621/scorableItem/1"],
+      ["Short answer questions (Part 2)", "https://ielts.inspera.com/player/?assessmentRunId=189694459&context=exam#/section/174309255/question/174309254/scorableItem/1"],
+    ],
+  };
+
+  const api = { OFFICIAL, parseKey, accepted, checkAnswer, BANDS, bandFromRaw, rawForBand, wordCount, writingBand, CRITERIA, criterionBand, CUE_CARDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.IeltsTools = api;
 })(this);

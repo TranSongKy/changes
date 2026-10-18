@@ -58,3 +58,20 @@ test("lịch đề Cambridge: mỗi thứ Bảy một đề, xong trước ngày
   assert.strictEqual(t[0].date, "2027-08-14");
   for (const x of t) assert.strictEqual(new Date(x.date + "T00:00:00").getDay(), 6, x.date);
 });
+
+test("nhận audio Listening theo sách, đề, phần", () => {
+  const c = (p) => M.classifyAudio(p);
+  assert.deepStrictEqual(c("ielts/audio/Cambridge 7/Test 1/Part 2.mp3"), { book: 7, test: 1, part: 2 });
+  assert.deepStrictEqual(c("ielts/audio/Cam7_Test1_Section3.mp3"), { book: 7, test: 1, part: 3 });
+  assert.deepStrictEqual(c("ielts/audio/C9T4S1.mp3"), { book: 9, test: 4, part: 1 });
+  assert.deepStrictEqual(c("ielts/audio/IELTS 5 - Test 2 - Part 4.m4a"), { book: 5, test: 2, part: 4 });
+  assert.strictEqual(c("ielts/audio/song.mp3"), null);
+  assert.strictEqual(c("ielts/cambridge/Cambridge 7.pdf"), null);
+  const a = M.buildAudio([
+    { path: "ielts/audio/Cambridge 7/Test 1/Part 2.mp3" },
+    { path: "ielts/audio/Cambridge 7/Test 1/Part 1.mp3" },
+    { path: "ielts/audio/song.mp3" },
+  ]);
+  assert.deepStrictEqual(Object.keys(a), ["c7t1"]);
+  assert.deepStrictEqual(a.c7t1, ["materials/ielts/audio/Cambridge%207/Test%201/Part%201.mp3", "materials/ielts/audio/Cambridge%207/Test%201/Part%202.mp3"]);
+});
