@@ -541,3 +541,24 @@ button.btn:disabled { opacity: .6; cursor: default; }
 .pdfnav input.cell { width: 64px; }
 details.keybox { margin-top: 14px; }
 details.keybox textarea { width: 100%; font-family: ui-monospace, Consolas, monospace; font-size: 13px; margin: 6px 0; }
+
+/* ---------- Bảng trình bày trên giấy ---------- */
+.paper-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.paper-head h3 { margin: 0; flex: 1 1 260px; }
+.ptable { margin: 10px 0; }
+.ptable h4 { margin: 0 0 4px; font-size: 14px; }
+table.paper-t { width: auto; min-width: 60%; }
+table.paper-t td, table.paper-t th { white-space: nowrap; }
+table.paper-t td.sel { background: var(--accent-soft); font-weight: 600; }
+table.paper-t td.ok { color: var(--good); font-weight: 600; }
+table.paper-t td.bad { color: var(--bad); }
+table.paper-t tr.cur > * { box-shadow: inset 0 -2px 0 var(--warn); }
+.pgroup { display: flex; gap: 18px; flex-wrap: wrap; }
+.pgroup .ptable { min-width: 0; }
+@media print {
+  body.print-paper * { visibility: hidden; }
+  body.print-paper .printing, body.print-paper .printing * { visibility: visible; }
+  body.print-paper .printing { position: absolute; left: 0; top: 0; width: 100%; border: 0; box-shadow: none; }
+  body.print-paper .printing button, body.print-paper .printing label { display: none; }
+  body.print-paper table.paper-t td, body.print-paper table.paper-t th { border: 1px solid #000; color: #000; background: none; }
+}

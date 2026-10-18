@@ -964,17 +964,6 @@
     }
     if (a === "dfs") data += `<table class="mtx"><tr><th>Đỉnh</th>${vs.map((v) => `<th>${v}</th>`).join("")}</tr><tr><th>Trước</th>${vs.map((v) => `<td>${st.parent[v] || "–"}</td>`).join("")}</tr></table>`;
     if (a === "topo") data += `<table class="mtx"><tr><th>Đỉnh</th>${vs.map((v) => `<th>${v}</th>`).join("")}</tr><tr><th>Bán bậc vào</th>${vs.map((v) => `<td>${st.visited.includes(v) ? "–" : st.indeg[v]}</td>`).join("")}</tr></table>`;
-    if (a === "dijkstra" && run.rows.length) {
-      const shown = run.rows.slice(0, st.visited.length);
-      data += `<h4>Bảng chạy tay</h4><div class="scroll"><table class="mtx"><tr><th>Bước</th>${vs.map((v) => `<th>${v}</th>`).join("")}</tr>
-        ${shown.map((row, k) => `<tr><th>${k + 1}</th>${vs.map((v) => {
-          const before = shown.slice(0, k).some((x) => x.fixed === v);
-          if (before) return "<td>–</td>";
-          const txt = row.dist[v] === GA.INF ? "∞" : `${row.dist[v]}, ${row.parent[v] || v}`;
-          return `<td class="${row.fixed === v ? "chg" : ""}">${txt}${row.fixed === v ? "*" : ""}</td>`;
-        }).join("")}</tr>`).join("")}</table></div>
-        <p class="small muted">Mỗi ô ghi (d, trước). Dấu * là đỉnh được cố định ở bước đó.</p>`;
-    }
     if (a === "kruskal") {
       const upTo = run.steps.slice(0, i + 1);
       const status = (e) => upTo.find((s) => s.hiEdge && s.hiEdge[0] === e[0] && s.hiEdge[1] === e[1]);
@@ -985,6 +974,34 @@
     if (a === "floyd") data += matrixTable(st.matrix, g.n, st) + `<p class="small muted">Ô tô màu là ô vừa được cập nhật khi cho đi qua đỉnh ${st.k || "–"}.</p>`;
     return data;
   }
+
+  // Bảng trình bày như làm trên giấy. upto: chỉ hiện các dòng tới bước mô phỏng này (null = hiện hết).
+  function paperHtml(paper, upto = null) {
+    if (!paper) return "";
+    const td = (c, tag = "td") => (typeof c === "string" ? `<${tag}>${esc(c)}</${tag}>` : `<${tag} class="${c.c}">${esc(c.t)}</${tag}>`);
+    const shown = (t) => t.rows.filter((r) => upto === null || r.step <= upto);
+    const lastStep = upto === null ? null : Math.max(-1, ...paper.tables.flatMap((t) => shown(t).map((r) => r.step)));
+    const table = (t) => {
+      const rows = shown(t);
+      if (!rows.length) return "";
+      return `<div class="ptable"><h4>${esc(t.title)}</h4><div class="scroll"><table class="mtx paper-t"><tr>${t.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr>
+        ${rows.map((r) => `<tr class="${r.step === lastStep ? "cur" : ""}">${r.cells.map((c, i) => td(c, i === 0 ? "th" : "td")).join("")}</tr>`).join("")}</table></div></div>`;
+    };
+    // Gom các bảng cùng nhóm (D và P của Floyd) thành một hàng
+    const groups = [];
+    paper.tables.forEach((t) => {
+      const g = groups[groups.length - 1];
+      if (t.group && g && g.key === t.group) g.items.push(t);
+      else groups.push({ key: t.group, items: [t] });
+    });
+    const body = groups.map((g) => {
+      const html = g.items.map(table).join("");
+      return html ? (g.items.length > 1 ? `<div class="pgroup">${html}</div>` : html) : "";
+    }).join("");
+    if (!body) return `<p class="muted small">Bảng sẽ hiện dần từng dòng khi bạn bấm Tiếp.</p>`;
+    return body + (paper.note && (upto === null || upto >= lastStepOf(paper)) ? `<p class="small muted">${esc(paper.note)}</p>` : "");
+  }
+  const lastStepOf = (paper) => Math.max(...paper.tables.flatMap((t) => t.rows.map((r) => r.step)));
 
   function renderSim(el) {
     if (!fits(pr.algo, pr.graph)) pr.graph = graphFor(pr.algo, Date.now() % 100000);
@@ -1020,8 +1037,16 @@
           ${simPanel(run, st, pr.step)}
           <p class="small muted">Quy ước: xét đỉnh kề theo thứ tự tăng dần, khi hòa thì chọn đỉnh hoặc cạnh có số nhỏ hơn.</p>
         </div>
+      </div>
+      <div class="card paper" id="paperCard">
+        <div class="paper-head"><h3>Bảng trình bày trên giấy: ${esc(A.name)}${A.needs.source ? ` từ đỉnh ${pr.src}` : ""}</h3>
+          <label class="small"><input type="checkbox" id="paperAll" ${pr.paperAll ? "checked" : ""}> Hiện cả bảng (bỏ chọn để hiện dần theo bước)</label>
+          <button type="button" class="btn ghost" id="paperPrint">In bảng</button></div>
+        ${paperHtml(run.paper, pr.paperAll ? null : pr.step)}
       </div>`;
     const rerender = () => renderPracticeBody();
+    el.querySelector("#paperAll").onchange = (e) => { pr.paperAll = e.target.checked; rerender(); };
+    el.querySelector("#paperPrint").onclick = () => printPaper(el.querySelector("#paperCard"));
     el.querySelector("#simAlgo").onchange = (e) => { stopSim(); pr.algo = e.target.value; pr.step = 0; rerender(); };
     const src = el.querySelector("#simSrc");
     if (src) src.onchange = (e) => { stopSim(); pr.src = Number(e.target.value); pr.step = 0; rerender(); };
@@ -1056,6 +1081,15 @@
       if (k === "next") pr.step = Math.min(pr.step + 1, run.steps.length - 1);
       rerender();
     }));
+  }
+  // In riêng phần bảng: thêm lớp vào body để CSS in ẩn mọi thứ khác
+  function printPaper(card) {
+    card.classList.add("printing");
+    document.body.classList.add("print-paper");
+    const done = () => { document.body.classList.remove("print-paper"); card.classList.remove("printing"); window.removeEventListener("afterprint", done); };
+    window.addEventListener("afterprint", done);
+    window.print();
+    setTimeout(done, 1000);
   }
   function stopSim() {
     clearInterval(pr.timer);
@@ -1144,7 +1178,10 @@
             </div></form>
           ${res ? `<div class="alert ${res.score === res.total ? "good" : "warn"}" style="margin-top:12px">Đúng ${res.score}/${res.total} ô.${res.score === res.total ? " Làm thêm đề mới để quen tay." : " Ô đỏ là ô sai. Đề dạng này đã vào sổ ôn lại."}</div>` : ""}
         </div>
-      </div>`;
+      </div>
+      ${res ? `<div class="card paper" id="paperCard"><div class="paper-head"><h3>Lời giải trình bày trên giấy</h3>
+        <button type="button" class="btn ghost" id="paperPrint">In bảng</button></div>
+        <p class="small muted">So bảng của bạn với bảng này từng dòng để tìm chỗ bắt đầu sai.</p>${paperHtml(A.run(g, 1).paper)}</div>` : ""}`;
     el.querySelector("#handAlgo").onchange = (e) => { pr.hAlgo = e.target.value; newHand(); renderPracticeBody(); };
     el.querySelector("#handNew").onclick = () => { newHand(); renderPracticeBody(); };
     el.querySelector("#handForm").onsubmit = (e) => {
@@ -1167,6 +1204,8 @@
     };
     const show = el.querySelector("#handShow");
     if (show) show.onclick = () => { pr.hResult.show = !pr.hResult.show; renderPracticeBody(); };
+    const pp = el.querySelector("#paperPrint");
+    if (pp) pp.onclick = () => printPaper(el.querySelector("#paperCard"));
     const steps = el.querySelector("#handSteps");
     if (steps) steps.onclick = () => { stopSim(); pr.algo = a; pr.graph = g; pr.src = 1; pr.step = 0; pr.view = "sim"; renderPractice(); };
   }
